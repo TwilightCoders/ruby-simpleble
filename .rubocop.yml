@@ -1,0 +1,48 @@
+AllCops:
+  TargetRubyVersion: 2.7
+  NewCops: enable
+  Exclude:
+    - "vendor/**/*"
+    - "ext/**/*"
+    - "bin/**/*"
+    - "Gemfile.lock"
+    - "*.gemspec"
+
+# Allow long lines in specs for readability
+Layout/LineLength:
+  Max: 120
+  Exclude:
+    - "spec/**/*"
+
+# Allow long methods in specs
+Metrics/MethodLength:
+  Exclude:
+    - "spec/**/*"
+
+# Allow large spec files
+Metrics/ModuleLength:
+  Exclude:
+    - "spec/**/*"
+
+# Allow large spec classes
+Metrics/ClassLength:
+  Exclude:
+    - "spec/**/*"
+
+# Allow complex specs
+Metrics/AbcSize:
+  Exclude:
+    - "spec/**/*"
+
+# Documentation not required for specs
+Style/Documentation:
+  Exclude:
+    - "spec/**/*"
+# RSpec cops require rubocop-rspec gem
+# Uncomment if you add rubocop-rspec to development dependencies
+# RSpec/MultipleExpectations:
+#   Max: 10
+# RSpec/NestedGroups:
+#   Max: 5
+# RSpec/ExampleLength:
+#   Max: 20
