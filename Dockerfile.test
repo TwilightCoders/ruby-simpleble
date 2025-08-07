@@ -1,0 +1,26 @@
+# Multi-stage Dockerfile for testing ruby-simpleble on different platforms
+ARG RUBY_VERSION=3.3
+FROM ruby:${RUBY_VERSION}
+
+# Install system dependencies for SimpleBLE
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libdbus-1-dev \
+    cmake \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy gem files
+COPY . .
+
+# Install bundler and dependencies
+RUN bundle install
+
+# Build and install the gem
+RUN gem build simpleble.gemspec && \
+    gem install simpleble-*.gem
+
+# Run tests
+CMD ["bundle", "exec", "rspec"]
