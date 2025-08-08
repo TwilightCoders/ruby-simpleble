@@ -45,19 +45,23 @@ end
 - **Windows** - WinRT Bluetooth APIs *(ready for testing)*
 
 ### 🔍 **BLE Operations**
-- ✅ **Bluetooth adapter discovery and management**
-- ✅ **Device scanning with timeout control**  
-- ✅ **Real-time device discovery**
-- ✅ **RSSI and connection status monitoring**
-- 🚧 **GATT service/characteristic operations** *(in development)*
-- 🚧 **Device connection and bonding** *(in development)*
+- ✅ Adapter discovery & identifiers
+- ✅ Bluetooth enabled check  
+- ✅ Device scanning (blocking scan_for + continuous start/stop)
+- ✅ Retrieval of discovered peripherals (identifier, address, RSSI, address_type, connectable?)
+- ✅ Basic connection lifecycle (connect, disconnect, paired?, unpair)
+- 🚧 GATT service & characteristic enumeration *(planned)*
+- 🚧 Read/Write/Notify/Indicate characteristic operations *(planned)*
+- 🚧 Manufacturer data, services list, descriptors *(planned)*
 
-### 🏗️ **Production Ready**
-- ✅ **Memory-safe C extension with proper lifecycle management**
-- ✅ **Comprehensive exception hierarchy for error handling**
-- ✅ **Thread-safe operations**
-- ✅ **RSpec test suite with 84%+ coverage**
-- ✅ **Cross-platform build system**
+### 🏗️ **Current State**
+- ✅ Core C extension foundation & memory management for adapters/peripherals
+- ✅ Exception hierarchy & native error mapping (scan/connection)
+- ✅ Cross-platform build scripts (macOS/Linux stable, Windows WIP)
+- ✅ Basic adapter & peripheral API implemented
+- 🚧 Expanded test coverage (integration tests gated by hardware)
+- 🚧 Windows runtime linking & packaging improvements
+- 🚧 GATT operations & notifications layer
 
 ## 🛠️ Installation
 
@@ -221,26 +225,31 @@ Platform BLE APIs (CoreBluetooth/BlueZ/WinRT)
 - **SimpleBLE Library**: Cross-platform BLE abstraction
 - **Platform Backends**: OS-specific BLE implementations
 
-## 🚦 Current Status
+### 🚦 Status Summary
 
-### ✅ **Completed** 
-- Cross-platform build system and C extension compilation
-- Bluetooth adapter discovery and management
-- BLE device scanning with timeout control
-- Memory-safe Ruby object lifecycle management
-- Comprehensive test suite and documentation
+| Area | Implemented | Notes |
+|------|-------------|-------|
+| Adapter enumeration | ✅ | identifier, address |
+| Scanning (start/stop/for) | ✅ | Timed & continuous |
+| Scan results retrieval | ✅ | Returns Peripheral objects |
+| Peripheral basic info | ✅ | identifier, address, RSSI, address_type |
+| Connection lifecycle | ✅ | connect, disconnect, paired?, unpair |
+| Services/Characteristics | ❌ | Planned |
+| Characteristic I/O | ❌ | Planned |
+| Notifications/Indications | ❌ | Planned |
+| Manufacturer data | ❌ | Planned |
+| Windows support | 🚧 | Linking/runtime WIP |
+| Test coverage | 🚧 | Expanding beyond placeholders |
+| Documentation accuracy | ✅ | Reflects current surface |
 
-### 🚧 **In Development**
-- GATT service and characteristic operations
-- Device connection and disconnection
-- Read/write/notify operations for characteristics  
-- Advanced BLE features (bonding, security, callbacks)
-
-### 🔮 **Planned**
-- Asynchronous operation support with Ruby blocks
-- Device filtering and advanced scanning options
-- Cross-platform CI/CD pipeline
-- Performance optimization and memory profiling
+### Roadmap
+- [ ] Enumerate services & characteristics
+- [ ] Characteristic read/write/notify/indicate
+- [ ] Manufacturer data & services list exposure
+- [ ] Callback bindings with GC-safe storage
+- [ ] Windows static/dynamic linking resolution
+- [ ] Hardware-gated integration test suite
+- [ ] Precompiled native gem variants (later)
 
 ## 📊 Compatibility
 

@@ -1,44 +1,44 @@
+// Ruby integration
 #include <ruby.h>
-#include "simpleble_wrapper.h"
+
+// SimpleBLE C API
+#include <simpleble_c/simpleble.h>
+#include <simpleble_c/adapter.h>
+#include <simpleble_c/peripheral.h>
+#include <simpleble_c/types.h>
 
 // Module and class definitions
 static VALUE mSimpleBLE;
 static VALUE cAdapter;
 static VALUE cPeripheral;
-static VALUE cService;
-static VALUE cCharacteristic;
-static VALUE cDescriptor;
 
 // Exception classes
 static VALUE eSimpleBLEError;
-static VALUE eNotSupportedError;
-static VALUE eBluetoothNotAvailableError;
-static VALUE eNotConnectedError;
-static VALUE eConnectionError;
 static VALUE eScanError;
-static VALUE eCharacteristicError;
-static VALUE eTimeoutError;
+static VALUE eConnectionError;
+static VALUE eCharacteristicError; // placeholder for future use
 
-// Ruby object data structures
+// Error handling macro (SimpleBLE currently only has SUCCESS/FAILURE)
+#define SIMPLEBLE_RAISE_IF_FAILURE(err, exc, msg) do { \
+    if ((err) != SIMPLEBLE_SUCCESS) { \
+        rb_raise((exc), "%s", (msg)); \
+    } \
+} while(0)
+
+// Ruby object data structures - using SimpleBLE C API types
 typedef struct {
-    void* adapter_handle;
-    VALUE scan_start_callback;
-    VALUE scan_stop_callback;
-    VALUE scan_found_callback;
-    VALUE scan_updated_callback;
+    simpleble_adapter_t adapter_handle;
 } adapter_data_t;
 
 typedef struct {
-    void* peripheral_handle;
-    VALUE connected_callback;
-    VALUE disconnected_callback;
+    simpleble_peripheral_t peripheral_handle;
 } peripheral_data_t;
 
 // Memory management functions
 static void adapter_free(void* ptr) {
     adapter_data_t* data = (adapter_data_t*)ptr;
     if (data->adapter_handle) {
-        simpleble_adapter_release(data->adapter_handle);
+        simpleble_adapter_release_handle(data->adapter_handle);
     }
     xfree(data);
 }
@@ -53,7 +53,7 @@ static const rb_data_type_t adapter_type = {
 static void peripheral_free(void* ptr) {
     peripheral_data_t* data = (peripheral_data_t*)ptr;
     if (data->peripheral_handle) {
-        simpleble_peripheral_release(data->peripheral_handle);
+        simpleble_peripheral_release_handle(data->peripheral_handle);
     }
     xfree(data);
 }
@@ -87,7 +87,7 @@ static void check_peripheral_data(peripheral_data_t* data) {
 static VALUE
 rb_adapter_bluetooth_enabled(VALUE self)
 {
-    return simpleble_adapter_bluetooth_enabled() ? Qtrue : Qfalse;
+    return simpleble_adapter_is_bluetooth_enabled() ? Qtrue : Qfalse;
 }
 
 /*
@@ -103,14 +103,10 @@ rb_adapter_get_adapters(VALUE self)
     VALUE adapters = rb_ary_new_capa(count);
     
     for (size_t i = 0; i < count; i++) {
-        void* adapter_handle = simpleble_adapter_get_handle(i);
+        simpleble_adapter_t adapter_handle = simpleble_adapter_get_handle(i);
         if (adapter_handle) {
             adapter_data_t* data = ALLOC(adapter_data_t);
             data->adapter_handle = adapter_handle;
-            data->scan_start_callback = Qnil;
-            data->scan_stop_callback = Qnil;
-            data->scan_found_callback = Qnil;
-            data->scan_updated_callback = Qnil;
             
             VALUE adapter = TypedData_Wrap_Struct(cAdapter, &adapter_type, data);
             rb_ary_push(adapters, adapter);
@@ -118,6 +114,100 @@ rb_adapter_get_adapters(VALUE self)
     }
     
     return adapters;
+}
+
+/*
+ * call-seq:
+ *   adapter.scan_start -> self
+ *
+ * Start scanning (continuous until scan_stop is called).
+ */
+static VALUE
+rb_adapter_scan_start(VALUE self)
+{
+    adapter_data_t* data; 
+    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
+    check_adapter_data(data);
+    simpleble_err_t err = simpleble_adapter_scan_start(data->adapter_handle);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eScanError, "Failed to start scan");
+    return self;
+}
+
+/*
+ * call-seq:
+ *   adapter.scan_stop -> self
+ *
+ * Stop scanning.
+ */
+static VALUE
+rb_adapter_scan_stop(VALUE self)
+{
+    adapter_data_t* data; 
+    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
+    check_adapter_data(data);
+    simpleble_err_t err = simpleble_adapter_scan_stop(data->adapter_handle);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eScanError, "Failed to stop scan");
+    return self;
+}
+
+/*
+ * call-seq:
+ *   adapter.scan_for(timeout_ms) -> self
+ *
+ * Perform a blocking scan for timeout_ms milliseconds.
+ */
+static VALUE
+rb_adapter_scan_for(VALUE self, VALUE timeout_ms_val)
+{
+    adapter_data_t* data; 
+    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
+    check_adapter_data(data);
+    int timeout_ms = NUM2INT(timeout_ms_val);
+    simpleble_err_t err = simpleble_adapter_scan_for(data->adapter_handle, timeout_ms);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eScanError, "Failed to perform timed scan");
+    return self;
+}
+
+/*
+ * call-seq:
+ *   adapter.scan_active? -> Boolean
+ */
+static VALUE
+rb_adapter_scan_active(VALUE self)
+{
+    adapter_data_t* data; 
+    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
+    check_adapter_data(data);
+    bool active = false;
+    simpleble_err_t err = simpleble_adapter_scan_is_active(data->adapter_handle, &active);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eScanError, "Failed to query scan state");
+    return active ? Qtrue : Qfalse;
+}
+
+/*
+ * call-seq:
+ *   adapter.scan_results -> [Peripheral, ...]
+ *
+ * Return peripherals discovered in last/ongoing scan.
+ */
+static VALUE
+rb_adapter_scan_results(VALUE self)
+{
+    adapter_data_t* data; 
+    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
+    check_adapter_data(data);
+    size_t count = simpleble_adapter_scan_get_results_count(data->adapter_handle);
+    VALUE ary = rb_ary_new_capa(count);
+    for (size_t i = 0; i < count; i++) {
+        simpleble_peripheral_t ph = simpleble_adapter_scan_get_results_handle(data->adapter_handle, i);
+        if (ph) {
+            peripheral_data_t* pdata = ALLOC(peripheral_data_t);
+            pdata->peripheral_handle = ph;
+            VALUE periph = TypedData_Wrap_Struct(cPeripheral, &peripheral_type, pdata);
+            rb_ary_push(ary, periph);
+        }
+    }
+    return ary;
 }
 
 /*
@@ -166,131 +256,116 @@ rb_adapter_address(VALUE self)
     return result;
 }
 
-/*
- * call-seq:
- *   adapter.scan_start -> nil
- *
- * Start scanning for peripherals.
- */
-static VALUE
-rb_adapter_scan_start(VALUE self)
-{
-    adapter_data_t* data;
-    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
-    check_adapter_data(data);
-    
-    simpleble_err_t err = simpleble_adapter_scan_start(data->adapter_handle);
-    if (err != SIMBLEBLE_SUCCESS) {
-        rb_raise(eScanError, "Failed to start scan");
-    }
-    
-    return Qnil;
+/* Peripheral Methods */
+
+/* identifier */
+static VALUE rb_peripheral_identifier(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    char* ident = simpleble_peripheral_identifier(data->peripheral_handle);
+    if (!ident) return Qnil;
+    VALUE str = rb_str_new_cstr(ident);
+    simpleble_free(ident);
+    return str;
 }
 
-/*
- * call-seq:
- *   adapter.scan_stop -> nil
- *
- * Stop scanning for peripherals.
- */
-static VALUE
-rb_adapter_scan_stop(VALUE self)
-{
-    adapter_data_t* data;
-    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
-    check_adapter_data(data);
-    
-    simpleble_err_t err = simpleble_adapter_scan_stop(data->adapter_handle);
-    if (err != SIMBLEBLE_SUCCESS) {
-        rb_raise(eScanError, "Failed to stop scan");
-    }
-    
-    return Qnil;
+/* address */
+static VALUE rb_peripheral_address(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    char* addr = simpleble_peripheral_address(data->peripheral_handle);
+    if (!addr) return Qnil;
+    VALUE str = rb_str_new_cstr(addr);
+    simpleble_free(addr);
+    return str;
 }
 
-/*
- * call-seq:
- *   adapter.scan_for(timeout_ms) -> nil
- *
- * Scan for peripherals for the specified timeout in milliseconds.
- */
-static VALUE
-rb_adapter_scan_for(VALUE self, VALUE timeout)
-{
-    adapter_data_t* data;
-    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
-    check_adapter_data(data);
-    
-    Check_Type(timeout, T_FIXNUM);
-    int timeout_ms = NUM2INT(timeout);
-    
-    if (timeout_ms <= 0) {
-        rb_raise(rb_eArgError, "timeout must be greater than 0");
-    }
-    
-    simpleble_err_t err = simpleble_adapter_scan_for(data->adapter_handle, timeout_ms);
-    if (err != SIMBLEBLE_SUCCESS) {
-        rb_raise(eScanError, "Failed to scan for devices");
-    }
-    
-    return Qnil;
+/* rssi */
+static VALUE rb_peripheral_rssi(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    int16_t rssi = simpleble_peripheral_rssi(data->peripheral_handle);
+    return INT2NUM(rssi);
 }
 
-/*
- * call-seq:
- *   adapter.scan_active? -> Boolean
- *
- * Check if scanning is currently active.
- */
-static VALUE
-rb_adapter_scan_active(VALUE self)
-{
-    adapter_data_t* data;
-    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
-    check_adapter_data(data);
-    
-    bool active;
-    simpleble_err_t err = simpleble_adapter_scan_is_active(data->adapter_handle, &active);
-    if (err != SIMBLEBLE_SUCCESS) {
-        rb_raise(eScanError, "Failed to check scan status");
-    }
-    
-    return active ? Qtrue : Qfalse;
+/* address_type */
+static VALUE rb_peripheral_address_type(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    simpleble_address_type_t at = simpleble_peripheral_address_type(data->peripheral_handle);
+    return INT2NUM((int)at);
 }
 
-/*
- * call-seq:
- *   adapter.scan_results -> Array
- *
- * Get array of discovered peripherals from last scan.
- */
-static VALUE
-rb_adapter_scan_results(VALUE self)
-{
-    adapter_data_t* data;
-    TypedData_Get_Struct(self, adapter_data_t, &adapter_type, data);
-    check_adapter_data(data);
-    
-    size_t count = simpleble_adapter_scan_get_results_count(data->adapter_handle);
-    VALUE peripherals = rb_ary_new_capa(count);
-    
-    for (size_t i = 0; i < count; i++) {
-        void* peripheral_handle = simpleble_adapter_scan_get_results_handle(data->adapter_handle, i);
-        if (peripheral_handle) {
-            peripheral_data_t* pdata = ALLOC(peripheral_data_t);
-            pdata->peripheral_handle = peripheral_handle;
-            pdata->connected_callback = Qnil;
-            pdata->disconnected_callback = Qnil;
-            
-            VALUE peripheral = TypedData_Wrap_Struct(cPeripheral, &peripheral_type, pdata);
-            rb_ary_push(peripherals, peripheral);
-        }
-    }
-    
-    return peripherals;
+/* connectable? */
+static VALUE rb_peripheral_connectable(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    bool connectable = false;
+    simpleble_err_t err = simpleble_peripheral_is_connectable(data->peripheral_handle, &connectable);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eConnectionError, "Failed to query connectable state");
+    return connectable ? Qtrue : Qfalse;
 }
 
-// Module initialization
+/* connected? */
+static VALUE rb_peripheral_connected(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    bool connected = false;
+    simpleble_err_t err = simpleble_peripheral_is_connected(data->peripheral_handle, &connected);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eConnectionError, "Failed to query connection state");
+    return connected ? Qtrue : Qfalse;
+}
+
+/* paired? */
+static VALUE rb_peripheral_paired(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    bool paired = false;
+    simpleble_err_t err = simpleble_peripheral_is_paired(data->peripheral_handle, &paired);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eConnectionError, "Failed to query paired state");
+    return paired ? Qtrue : Qfalse;
+}
+
+/* connect */
+static VALUE rb_peripheral_connect(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    simpleble_err_t err = simpleble_peripheral_connect(data->peripheral_handle);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eConnectionError, "Failed to connect to peripheral");
+    return self;
+}
+
+/* disconnect */
+static VALUE rb_peripheral_disconnect(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    simpleble_err_t err = simpleble_peripheral_disconnect(data->peripheral_handle);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eConnectionError, "Failed to disconnect peripheral");
+    return self;
+}
+
+/* unpair */
+static VALUE rb_peripheral_unpair(VALUE self) {
+    peripheral_data_t* data; 
+    TypedData_Get_Struct(self, peripheral_data_t, &peripheral_type, data);
+    check_peripheral_data(data);
+    simpleble_err_t err = simpleble_peripheral_unpair(data->peripheral_handle);
+    SIMPLEBLE_RAISE_IF_FAILURE(err, eConnectionError, "Failed to unpair peripheral");
+    return self;
+}
+
+// TODO: services, manufacturer_data, read/write characteristics, notifications.
+
+// Module initialization - SimpleBLE C API direct integration working locally
 void Init_simpleble(void)
 {
     // Define main module
@@ -299,25 +374,31 @@ void Init_simpleble(void)
     // Define classes
     cAdapter = rb_define_class_under(mSimpleBLE, "Adapter", rb_cObject);
     cPeripheral = rb_define_class_under(mSimpleBLE, "Peripheral", rb_cObject);
-    cService = rb_define_class_under(mSimpleBLE, "Service", rb_cObject);
-    cCharacteristic = rb_define_class_under(mSimpleBLE, "Characteristic", rb_cObject);
-    cDescriptor = rb_define_class_under(mSimpleBLE, "Descriptor", rb_cObject);
     
-    // Define exception classes
+    // Define (or fetch existing) exception classes
     eSimpleBLEError = rb_define_class_under(mSimpleBLE, "Error", rb_eStandardError);
-    eNotSupportedError = rb_define_class_under(mSimpleBLE, "NotSupportedError", eSimpleBLEError);
-    eBluetoothNotAvailableError = rb_define_class_under(mSimpleBLE, "BluetoothNotAvailableError", eSimpleBLEError);
-    eNotConnectedError = rb_define_class_under(mSimpleBLE, "NotConnectedError", eSimpleBLEError);
-    eConnectionError = rb_define_class_under(mSimpleBLE, "ConnectionError", eSimpleBLEError);
-    eScanError = rb_define_class_under(mSimpleBLE, "ScanError", eSimpleBLEError);
-    eCharacteristicError = rb_define_class_under(mSimpleBLE, "CharacteristicError", eSimpleBLEError);
-    eTimeoutError = rb_define_class_under(mSimpleBLE, "TimeoutError", eSimpleBLEError);
+    // Fetch subclasses defined in Ruby layer if present
+    if (rb_const_defined(mSimpleBLE, rb_intern("ScanError"))) {
+        eScanError = rb_const_get(mSimpleBLE, rb_intern("ScanError"));
+    } else {
+        eScanError = rb_define_class_under(mSimpleBLE, "ScanError", eSimpleBLEError);
+    }
+    if (rb_const_defined(mSimpleBLE, rb_intern("ConnectionError"))) {
+        eConnectionError = rb_const_get(mSimpleBLE, rb_intern("ConnectionError"));
+    } else {
+        eConnectionError = rb_define_class_under(mSimpleBLE, "ConnectionError", eSimpleBLEError);
+    }
+    if (rb_const_defined(mSimpleBLE, rb_intern("CharacteristicError"))) {
+        eCharacteristicError = rb_const_get(mSimpleBLE, rb_intern("CharacteristicError"));
+    } else {
+        eCharacteristicError = rb_define_class_under(mSimpleBLE, "CharacteristicError", eSimpleBLEError);
+    }
     
-    // Define Adapter class methods
+    // Adapter class methods
     rb_define_singleton_method(cAdapter, "bluetooth_enabled?", rb_adapter_bluetooth_enabled, 0);
     rb_define_singleton_method(cAdapter, "get_adapters", rb_adapter_get_adapters, 0);
     
-    // Define Adapter instance methods
+    // Adapter instance methods
     rb_define_method(cAdapter, "identifier", rb_adapter_identifier, 0);
     rb_define_method(cAdapter, "address", rb_adapter_address, 0);
     rb_define_method(cAdapter, "scan_start", rb_adapter_scan_start, 0);
@@ -325,6 +406,16 @@ void Init_simpleble(void)
     rb_define_method(cAdapter, "scan_for", rb_adapter_scan_for, 1);
     rb_define_method(cAdapter, "scan_active?", rb_adapter_scan_active, 0);
     rb_define_method(cAdapter, "scan_results", rb_adapter_scan_results, 0);
-    
-    // TODO: Add peripheral methods, callbacks, etc.
+
+    // Peripheral instance methods
+    rb_define_method(cPeripheral, "identifier", rb_peripheral_identifier, 0);
+    rb_define_method(cPeripheral, "address", rb_peripheral_address, 0);
+    rb_define_method(cPeripheral, "rssi", rb_peripheral_rssi, 0);
+    rb_define_method(cPeripheral, "address_type", rb_peripheral_address_type, 0);
+    rb_define_method(cPeripheral, "connectable?", rb_peripheral_connectable, 0);
+    rb_define_method(cPeripheral, "connected?", rb_peripheral_connected, 0);
+    rb_define_method(cPeripheral, "paired?", rb_peripheral_paired, 0);
+    rb_define_method(cPeripheral, "connect", rb_peripheral_connect, 0);
+    rb_define_method(cPeripheral, "disconnect", rb_peripheral_disconnect, 0);
+    rb_define_method(cPeripheral, "unpair", rb_peripheral_unpair, 0);
 }

@@ -15,6 +15,19 @@ task :setup do
   puts "✅ Development environment ready!"
 end
 
+def copy_native_extension
+  FileUtils.mkdir_p('lib/simpleble')
+  dlext = RbConfig::CONFIG['DLEXT']
+  src = File.join('ext', 'simpleble', "simpleble.#{dlext}")
+  unless File.exist?(src)
+    puts "❌ Built extension missing at #{src}"
+    exit 1
+  end
+  dest = File.join('lib', 'simpleble', File.basename(src))
+  FileUtils.cp(src, dest)
+  puts "✅ Copied #{src} -> #{dest}"
+end
+
 desc "Compile the C extension"
 task :compile do
   Dir.chdir('ext/simpleble') do
@@ -22,18 +35,11 @@ task :compile do
     sh 'make clean'
     sh 'make'
   end
-
-  # Copy compiled extension to lib directory
-  FileUtils.mkdir_p('lib/simpleble')
-  compiled_ext = Dir.glob('ext/simpleble/simpleble.{bundle,so}').first
-  if compiled_ext
-    FileUtils.cp(compiled_ext, 'lib/simpleble/')
-    puts "✅ Extension compiled and copied to lib/!"
-  else
-    puts "❌ Could not find compiled extension!"
-    exit 1
-  end
+  copy_native_extension
 end
+
+desc "Install (alias for compile)"
+task :install => :compile
 
 desc "Clean compiled files"
 task :clean do
@@ -80,7 +86,7 @@ task :vendor_status do
   puts "\n📋 Key vendor files:"
   key_files = %w[
     vendor/simpleble/simpleble/include/simpleble/SimpleBLE.h
-    vendor/simpleble/simplecble/include/simplecble/simpleble.h
+  vendor/simpleble/simpleble/include/simpleble_c/simpleble.h
     vendor/simpleble/install_simplecble/lib/libsimpleble.a
     vendor/simpleble/install_simplecble/lib/libsimplecble.a
   ]

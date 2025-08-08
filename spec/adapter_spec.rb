@@ -12,17 +12,15 @@ RSpec.describe SimpleBLE::Adapter do
   end
 
   # Integration tests that require working C extension
-  describe "adapter management", :integration do
-    it "can get list of available adapters" do
-      skip "C extension not yet linked with SimpleBLE library"
+  describe "adapter management" do
+    it "returns an array from get_adapters" do
       adapters = SimpleBLE::Adapter.get_adapters
       expect(adapters).to be_an(Array)
     end
 
-    it "can check bluetooth status" do
-      skip "C extension not yet linked with SimpleBLE library"
+    it "returns boolean for bluetooth_enabled?" do
       status = SimpleBLE::Adapter.bluetooth_enabled?
-      expect(status).to be_in([true, false])
+      expect([true,false]).to include(status)
     end
   end
 
@@ -30,7 +28,7 @@ RSpec.describe SimpleBLE::Adapter do
     let(:adapter) { SimpleBLE::Adapter.get_adapters.first }
 
     before do
-      skip "C extension not yet linked with SimpleBLE library"
+      skip "No adapter available on this system" unless adapter
     end
 
     it "has an identifier" do
@@ -39,28 +37,27 @@ RSpec.describe SimpleBLE::Adapter do
     end
 
     it "has an address" do
-      expect(adapter.address).to be_a(String)
-      expect(adapter.address).to match(/\A[0-9A-Fa-f:]{17}\z/) # MAC address format
+  addr = adapter.address
+  expect(addr).to be_a(String)
+  expect(addr).not_to be_empty
+  mac_regex = /\A(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\z/
+  uuid_regex = /\A[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\z/
+  # Some platforms (or disabled Bluetooth) may return a UUID-like identifier instead of a MAC.
+  expect(addr).to match(mac_regex).or match(uuid_regex)
     end
 
-    it "can start and stop scanning" do
-      expect { adapter.scan_start }.not_to raise_error
-      expect { adapter.scan_stop }.not_to raise_error
-    end
-
-    it "can scan for a specific duration" do
-      expect { adapter.scan_for(1000) }.not_to raise_error
-    end
-
-    it "can check if scan is active" do
-      scan_active = adapter.scan_is_active?
-      expect(scan_active).to be_in([true, false])
-    end
-
-    it "can get scan results" do
-      adapter.scan_for(1000)
+    it "can perform a timed scan and retrieve results" do
+  skip "Bluetooth disabled" unless SimpleBLE::Adapter.bluetooth_enabled?
+      adapter.scan_for(200) # short scan
       results = adapter.scan_results
       expect(results).to be_an(Array)
+    end
+
+    it "can start and stop continuous scanning" do
+  skip "Bluetooth disabled" unless SimpleBLE::Adapter.bluetooth_enabled?
+      adapter.scan_start
+      expect(adapter.scan_active?).to be(true).or be(false) # presence check
+      adapter.scan_stop
     end
   end
 end

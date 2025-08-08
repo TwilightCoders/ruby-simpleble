@@ -1,7 +1,13 @@
 require_relative 'simpleble/version'
 require_relative 'simpleble/exceptions'
 
-# Load the C extension first which defines SimpleBLE core classes
+# On Windows ensure the directory containing dependent DLLs is on PATH before loading extension
+if Gem.win_platform? && ENV['SIMPLEBLE_DEBUG']
+  dir = File.expand_path(File.join(__dir__, 'simpleble'))
+  warn "[SimpleBLE] Extension dir contents (pre-require): #{Dir.glob(File.join(dir, '*')).map { |f| File.basename(f) }.join(', ')}"
+end
+
+# Fast path load of native extension (rake compile must have copied it). Mirrors fastpbkdf2 style.
 require_relative 'simpleble/simpleble'
 
 # Load Ruby wrapper classes

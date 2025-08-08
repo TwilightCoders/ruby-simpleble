@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+### Added
+- Implemented adapter scanning methods: scan_start, scan_stop, scan_for, scan_active?, scan_results
+- Implemented peripheral basic methods: identifier, address, rssi, address_type, connectable?, connected?, paired?, connect, disconnect, unpair
+- Native error mapping with dedicated ScanError and ConnectionError exceptions
+- README status table aligned with actual implemented API surface
+
+### Changed
+- Updated specs to exercise newly implemented methods where hardware is available
+
+### Pending
+- Service/Characteristic enumeration and I/O operations
+- Windows runtime linking resolution
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

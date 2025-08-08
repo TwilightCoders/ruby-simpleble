@@ -28,6 +28,10 @@ Gemfile.lock
 
 # Coverage
 coverage/
+ext/simpleble/tmp_src/
+ext/simpleble/*.o
+ext/simpleble/*.so
+ext/simpleble/*.bundle
 
 # IDE
 .vscode/
