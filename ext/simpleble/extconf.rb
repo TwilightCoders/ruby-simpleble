@@ -30,6 +30,7 @@ when :windows
     $CXXFLAGS << ' -fexceptions'
   end
   $LDFLAGS << ' -lole32 -loleaut32 -lws2_32 -liphlpapi -lbcrypt -lruntimeobject'
+  
 end
 
 # Build SimpleBLE library if not present
