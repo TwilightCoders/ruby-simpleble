@@ -38,16 +38,10 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y --no-progress --limit-output
-          # Check if MSYS2 exists and install development tools
-          echo "Checking for MSYS2..."
-          ls -la /c/msys64/ || echo "MSYS2 not found at /c/msys64/"
-          if [ -f "/c/msys64/usr/bin/pacman.exe" ]; then
-            echo "Installing MSYS2 development tools..."
-            /c/msys64/usr/bin/pacman.exe -Sy --noconfirm
-            /c/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake
-          else
-            echo "MSYS2 not available - relying on Visual Studio tools"
-          fi
+          # Ensure MSYS2 development tools are available for Ruby C extensions
+          echo "Installing MSYS2 development tools for Ruby extension compilation..."
+          ridk exec pacman -Sy --noconfirm
+          ridk exec pacman -S --noconfirm mingw-w64-x86_64-toolchain
         shell: bash
 
       - name: Install system dependencies (Linux)

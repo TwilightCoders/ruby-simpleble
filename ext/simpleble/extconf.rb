@@ -62,17 +62,19 @@ unless File.exist?(library_file) || ENV['SKIP_VENDOR_BUILD'] == '1'
   Dir.chdir(vendor_path) do
     case platform
     when :windows
-      # Try building SimpleBLE without platform specification to avoid Ninja generator issues
-      puts "Attempting SimpleBLE build without platform specification..."
-      if !system("utils\\build_lib.bat")
-        puts "Build without arch failed, trying with explicit x64 platform..."
-        # Auto-detect Windows architecture
-        arch = case RUBY_PLATFORM
-        when /i386/, /x86/ then 'x86'
-        when /x86_64/, /x64/, /amd64/ then 'x64'
-        else 'x64' # default to x64 for unknown architectures
-        end
-        system("utils\\build_lib.bat -arch #{arch}") || abort("Failed to build SimpleBLE on Windows")
+      # Auto-detect Windows architecture first
+      arch = case RUBY_PLATFORM
+      when /i386/, /x86/ then 'x86'
+      when /x86_64/, /x64/, /amd64/ then 'x64'
+      else 'x64' # default to x64 for unknown architectures
+      end
+      
+      # Try building SimpleBLE with explicit architecture to avoid Ninja generator issues
+      puts "Building SimpleBLE for Windows #{arch}..."
+      unless system("utils\\build_lib.bat -arch #{arch}")
+        # If that fails, try without platform specification as fallback
+        puts "Build with explicit arch failed, trying without platform specification..."
+        system("utils\\build_lib.bat") || abort("Failed to build SimpleBLE on Windows")
       end
     else
       system('./utils/build_lib.sh simplecble') || abort("Failed to build SimpleBLE")
