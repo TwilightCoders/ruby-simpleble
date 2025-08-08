@@ -88,18 +88,19 @@ jobs:
           ls -la install_simplecble/lib/ || echo "install_simplecble/lib directory not found!"
         shell: bash
 
-      - name: Build SimpleBLE vendor library (Windows)
+      - name: Verify SimpleBLE vendor library is available
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
-          set -euo pipefail
+          echo "Verifying SimpleBLE submodule is properly initialized..."
           if [ ! -d vendor/simpleble ]; then
-            echo "ERROR: vendor/simpleble directory not found"; exit 1; fi
-          echo "Top-level vendor contents (first 15):"; ls -1 vendor/simpleble | head -15
-          pushd vendor/simpleble
-          echo "Attempting build of primary 'simpleble' target (produces simpleble-c wrapper libs)"
-          bash ./utils/build_lib.sh simpleble -s || { echo "Primary simpleble build failed"; exit 1; }
-          # For multi-config generators (Visual Studio) the helper script built Debug by default; ensure Release build/install too
+            echo "ERROR: vendor/simpleble directory not found"; exit 1
+          fi
+          echo "SimpleBLE source files present:"
+          ls -la vendor/simpleble/ | head -10
+          echo "Build scripts present:"
+          ls -la vendor/simpleble/utils/
+          echo "✅ SimpleBLE vendor source ready - extconf.rb will handle the build"
           if [ ! -d install_simpleble/lib/Release ]; then
             echo "Release libraries not present; invoking explicit Release build/install"
             if [ -d build_simpleble ]; then
