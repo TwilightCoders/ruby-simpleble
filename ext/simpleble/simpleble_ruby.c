@@ -1,5 +1,6 @@
 // Ruby integration
 #include <ruby.h>
+#include <stdlib.h>
 
 // SimpleBLE C API - use only the installed headers
 #include <simpleble_c/adapter.h>
@@ -44,7 +45,7 @@ static void adapter_free(void* ptr) {
 
 static const rb_data_type_t adapter_type = {
     "SimpleBLE::Adapter",
-    {0, adapter_free, 0},
+    {0, adapter_free, 0, 0},
     0, 0,
     RUBY_TYPED_FREE_IMMEDIATELY
 };
@@ -59,7 +60,7 @@ static void peripheral_free(void* ptr) {
 
 static const rb_data_type_t peripheral_type = {
     "SimpleBLE::Peripheral",
-    {0, peripheral_free, 0},
+    {0, peripheral_free, 0, 0},
     0, 0,
     RUBY_TYPED_FREE_IMMEDIATELY
 };
@@ -228,7 +229,7 @@ rb_adapter_identifier(VALUE self)
     }
     
     VALUE result = rb_str_new_cstr(identifier);
-    simpleble_free(identifier);
+    free(identifier);
     return result;
 }
 
