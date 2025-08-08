@@ -2,9 +2,9 @@
 #include <ruby.h>
 
 // SimpleBLE C API - use only the installed headers
-#include <simplecble/adapter.h>
-#include <simplecble/peripheral.h>
-#include <simplecble/types.h>
+#include <simpleble_c/adapter.h>
+#include <simpleble_c/peripheral.h>
+#include <simpleble_c/types.h>
 
 // Module and class definitions
 static VALUE mSimpleBLE;

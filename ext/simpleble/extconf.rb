@@ -73,7 +73,7 @@ end
 
 # Include directories - use only installed headers to avoid conflicts  
 $INCFLAGS << " -I#{install_path}/include"
-$INCFLAGS << " -I#{install_path}/include/simplecble"
+$INCFLAGS << " -I#{install_path}/include/simpleble_c"
 
 # Library paths and linking  
 $LDFLAGS << " -L#{install_path}/lib"
