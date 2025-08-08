@@ -150,7 +150,6 @@ jobs:
       - name: Compile extension
         env:
           SIMPLEBLE_DEBUG: "1"
-          SKIP_VENDOR_BUILD: "1"
         shell: bash
         run: |
           echo "Ruby platform: $(ruby -e 'print RUBY_PLATFORM')"
