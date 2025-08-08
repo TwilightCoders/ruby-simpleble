@@ -47,7 +47,8 @@ static const rb_data_type_t adapter_type = {
     "SimpleBLE::Adapter",
     {0, adapter_free, 0, 0},
     0, 0,
-    RUBY_TYPED_FREE_IMMEDIATELY
+    RUBY_TYPED_FREE_IMMEDIATELY,
+    {0}  /* reserved field */
 };
 
 static void peripheral_free(void* ptr) {
@@ -62,7 +63,8 @@ static const rb_data_type_t peripheral_type = {
     "SimpleBLE::Peripheral",
     {0, peripheral_free, 0, 0},
     0, 0,
-    RUBY_TYPED_FREE_IMMEDIATELY
+    RUBY_TYPED_FREE_IMMEDIATELY,
+    {0}  /* reserved field */
 };
 
 // Helper functions
@@ -252,7 +254,7 @@ rb_adapter_address(VALUE self)
     }
     
     VALUE result = rb_str_new_cstr(address);
-    simpleble_free(address);
+    free(address);
     return result;
 }
 
@@ -266,7 +268,7 @@ static VALUE rb_peripheral_identifier(VALUE self) {
     char* ident = simpleble_peripheral_identifier(data->peripheral_handle);
     if (!ident) return Qnil;
     VALUE str = rb_str_new_cstr(ident);
-    simpleble_free(ident);
+    free(ident);
     return str;
 }
 
@@ -278,7 +280,7 @@ static VALUE rb_peripheral_address(VALUE self) {
     char* addr = simpleble_peripheral_address(data->peripheral_handle);
     if (!addr) return Qnil;
     VALUE str = rb_str_new_cstr(addr);
-    simpleble_free(addr);
+    free(addr);
     return str;
 }
 
