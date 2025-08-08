@@ -1,0 +1,398 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, release/**]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  actions: write
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Temporarily restrict to Windows while stabilizing Win build
+        os: [windows-latest]
+        ruby-version: ["2.7", "3.0", "3.1", "3.2", "3.3"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize submodules explicitly
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Repository contents:"
+          ls -la
+          echo "Git configuration:"
+          git config --list | grep submodule || echo "No submodule config found"
+          echo "Gitmodules file:"
+          cat .gitmodules || echo "No .gitmodules file found"
+          echo "Git submodule foreach check:"
+          git submodule foreach --recursive pwd || echo "No submodules found"
+          echo "Trying submodule update with --init --recursive:"
+          git submodule update --init --recursive --verbose || echo "Submodule update failed"
+          echo "Final submodule status:"
+          git submodule status || echo "No submodules"
+          echo "Checking for vendor directory:"
+          ls -la vendor/ || echo "vendor/ directory does not exist"
+          echo "Creating vendor directory manually if needed:"
+          mkdir -p vendor
+          echo "Checking .gitmodules content again:"
+          cat .gitmodules
+        shell: bash
+
+      - name: Set up Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+
+  # Ubuntu/macOS steps temporarily disabled
+
+      - name: Install system dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          # Install CMake quietly (suppress verbose progress spam)
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y --no-progress --limit-output
+          # SimpleBLE uses WinRT Bluetooth APIs on Windows
+          echo "Using system WinRT Bluetooth APIs"
+        shell: bash
+
+      - name: Build SimpleBLE vendor library (*nix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          echo "Checking if vendor/simpleble exists..."
+          if [ ! -d "vendor/simpleble" ]; then
+            echo "ERROR: vendor/simpleble directory not found!"
+            exit 1
+          fi
+          
+          echo "Contents of vendor/simpleble:"
+          ls -la vendor/simpleble/ | head -10
+          
+          echo "Building SimpleBLE library..."
+          cd vendor/simpleble
+          chmod +x ./utils/build_lib.sh
+          ./utils/build_lib.sh simplecble
+          
+          echo "Checking if install_simplecble was created:"
+          ls -la install_simplecble/ || echo "install_simplecble directory not created!"
+          ls -la install_simplecble/lib/ || echo "install_simplecble/lib directory not found!"
+        shell: bash
+
+      - name: Verify SimpleBLE vendor library is available
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          echo "Verifying SimpleBLE submodule is properly initialized..."
+          if [ ! -d vendor/simpleble ]; then
+            echo "ERROR: vendor/simpleble directory not found"; exit 1
+          fi
+          echo "SimpleBLE source files present:"
+          ls -la vendor/simpleble/ | head -10
+          echo "Build scripts present:"
+          ls -la vendor/simpleble/utils/
+          echo "✅ SimpleBLE vendor source ready - extconf.rb will handle the build"
+          if [ ! -d install_simpleble/lib/Release ]; then
+            echo "Release libraries not present; invoking explicit Release build/install"
+            if [ -d build_simpleble ]; then
+              cmake --build build_simpleble --config Release -j7
+              cmake --install build_simpleble --config Release --prefix install_simpleble
+            fi
+          fi
+          echo "Listing install_simpleble/lib:"; ls -l install_simpleble/lib || true
+          # Legacy/alternate wrapper (simplecble) if present
+          if [ -d simplecble ]; then
+            echo "Building legacy simplecble target (optional)"
+            bash ./utils/build_lib.sh simplecble -s || echo "Legacy simplecble build failed (continuing)"
+            if [ ! -d install_simplecble/lib/Release ] && [ -d build_simplecble ]; then
+              echo "Ensuring Release build for simplecble"
+              cmake --build build_simplecble --config Release -j7 || true
+              cmake --install build_simplecble --config Release --prefix install_simplecble || true
+            fi
+            echo "Listing install_simplecble/lib:"; ls -l install_simplecble/lib || true
+          fi
+          popd
+          echo "Adding potential library/bin paths to GITHUB_PATH"
+          for p in \
+            "$(pwd)/vendor/simpleble/install_simplecble/lib" \
+            "$(pwd)/vendor/simpleble/install_simplecble/bin" \
+            "$(pwd)/vendor/simpleble/build_simplecble/install/lib" \
+            "$(pwd)/vendor/simpleble/build_simplecble/install/bin" \
+            "$(pwd)/vendor/simpleble/install_simpleble/lib" \
+            "$(pwd)/vendor/simpleble/install_simpleble/bin" \
+            "$(pwd)/vendor/simpleble/build_simpleble/install/lib" \
+            "$(pwd)/vendor/simpleble/build_simpleble/install/bin"; do
+            if [ -d "$p" ]; then
+              echo "$p" >> "$GITHUB_PATH"; echo "Added $p";
+            fi
+          done
+
+      - name: Upload Windows vendor libraries
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-vendor-libs-${{ matrix.ruby-version }}
+          path: |
+            vendor/simpleble/**/install*/lib/*
+            vendor/simpleble/**/install*/bin/*
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Compile extension
+        env:
+          SIMPLEBLE_DEBUG: "1"
+        shell: bash
+        run: |
+          echo "Ruby platform: $(ruby -e 'print RUBY_PLATFORM')"
+          set -o pipefail || true
+          bundle exec rake compile V=1 2>&1 | tee compile.log
+          echo "--- List resulting ext/simpleble directory ---"
+          ls -la ext/simpleble || true
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            echo "--- nm symbols (Linux) ---"
+            nm -C ext/simpleble/simpleble.so | head -50 || true
+          fi
+          echo "--- file on built extension ---"
+          file ext/simpleble/simpleble.* || true
+
+      - name: Upload compile log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-log-${{ matrix.os }}-${{ matrix.ruby-version }}
+          path: |
+            compile.log
+            ext/simpleble/Makefile
+            ext/simpleble/*.o
+            ext/simpleble/simpleble.*
+          if-no-files-found: warn
+          retention-days: 5
+
+      - name: Run tests with coverage
+        env:
+          SIMPLEBLE_DEBUG: "1"
+        run: bundle exec rspec --backtrace
+
+      - name: Upload coverage artifact (Ruby 3.3, Ubuntu only)
+        if: matrix.ruby-version == '3.3' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 1
+
+      - name: Run RuboCop (Ruby 3.3, Ubuntu only)
+        if: matrix.ruby-version == '3.3' && matrix.os == 'ubuntu-latest'
+        run: bundle exec rubocop || true
+        continue-on-error: true
+
+  coverage:
+    runs-on: ubuntu-latest
+    needs: test
+    if: always() # Run even if some test jobs fail
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+        continue-on-error: true # In case no coverage artifact was uploaded
+
+      - name: Upload coverage to Qlty
+        uses: qltysh/qlty-action/coverage@v1
+        continue-on-error: true
+        env:
+          QLTY_COVERAGE_TOKEN: ${{ secrets.QLTY_COVERAGE_TOKEN }}
+        with:
+          oidc: true
+          files: coverage/coverage.json
+
+      - name: Run Qlty code quality checks
+        run: |
+          curl -sSfL https://qlty.sh | sh
+          echo "$HOME/.qlty/bin" >> $GITHUB_PATH
+          ~/.qlty/bin/qlty check || true
+        continue-on-error: true
+
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libdbus-1-dev cmake
+
+      - name: Run bundle audit
+        run: |
+          gem install bundler-audit
+          bundle audit --update || true
+        continue-on-error: true
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, coverage, security]
+    if: false # Disabled to prevent accidental gem building
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libdbus-1-dev cmake
+
+      - name: Modify version for develop branch
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          sed -i "s/VERSION = '\([^']*\)'/VERSION = '\1.dev.${SHORT_SHA}'/" lib/simpleble/version.rb
+          echo "VERSION_SUFFIX=.dev.${SHORT_SHA}" >> $GITHUB_ENV
+
+      - name: Modify version for release branch
+        if: startsWith(github.ref, 'refs/heads/release/')
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          sed -i "s/VERSION = '\([^']*\)'/VERSION = '\1.rc.${SHORT_SHA}'/" lib/simpleble/version.rb
+          echo "VERSION_SUFFIX=.rc.${SHORT_SHA}" >> $GITHUB_ENV
+
+      - name: Set version suffix for main
+        if: github.ref == 'refs/heads/main'
+        run: echo "VERSION_SUFFIX=" >> $GITHUB_ENV
+
+      - name: Build gem
+        run: gem build simpleble.gemspec
+
+      - name: Get gem info
+        id: gem_info
+        run: |
+          GEM_FILE=$(ls *.gem)
+          GEM_VERSION=$(echo $GEM_FILE | sed 's/simpleble-\(.*\)\.gem/\1/')
+          echo "gem_file=$GEM_FILE" >> $GITHUB_OUTPUT
+          echo "gem_version=$GEM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Store gem artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gem-${{ steps.gem_info.outputs.gem_version }}
+          path: "*.gem"
+          retention-days: 30
+
+      - name: Create build summary
+        run: |
+          echo "## Gem Built Successfully 💎" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.gem_info.outputs.gem_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **File**: ${{ steps.gem_info.outputs.gem_file }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 **Ready to publish!** Use the 'Manual Release' workflow to publish this gem." >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: false # Disabled to prevent accidental gem publishing
+    environment:
+      name: production
+      url: https://github.com/TwilightCoders/ruby-simpleble/packages
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libdbus-1-dev cmake
+
+      - name: Download gem artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gem-*
+          merge-multiple: true
+
+      - name: Show deployment details
+        run: |
+          echo "## 🚀 Ready to Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "**Gem**: $(ls *.gem)" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Size**: $(ls -lh *.gem | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+
+      - name: Publish to GitHub Packages
+        id: publish
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.gem
+          cat << EOF > ~/.gem/credentials
+          ---
+          :github: Bearer ${{ secrets.GITHUB_TOKEN }}
+          EOF
+          chmod 600 ~/.gem/credentials
+
+          # Try to publish, capturing output
+          if gem push --key github --host https://rubygems.pkg.github.com/TwilightCoders *.gem 2>&1 | tee publish_output.log; then
+            echo "success=true" >> $GITHUB_OUTPUT
+            echo "message=Successfully published $(ls *.gem)" >> $GITHUB_OUTPUT
+          else
+            # Check if it's a version conflict (common scenario)
+            if grep -q "already exists" publish_output.log || grep -q "Repushing of gem versions is not allowed" publish_output.log; then
+              echo "success=false" >> $GITHUB_OUTPUT
+              echo "message=Version $(ls *.gem) already exists in GitHub Packages - no action needed" >> $GITHUB_OUTPUT
+            else
+              echo "success=false" >> $GITHUB_OUTPUT
+              echo "message=Failed to publish: $(cat publish_output.log)" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Deployment summary
+        run: |
+          if [ "${{ steps.publish.outputs.success }}" == "true" ]; then
+            echo "## ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.publish.outputs.message }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️ Deployment Skipped" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.publish.outputs.message }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This is typically expected when the version already exists." >> $GITHUB_STEP_SUMMARY
+          fi
