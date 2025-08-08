@@ -48,7 +48,7 @@ end
 # Note: SimpleBLE build system inconsistently spells the library name as "simbleble" (missing P)
 library_file = case platform
 when :windows
-  "#{install_path}/lib/simpleble.lib" # Windows uses .lib files (correct spelling!)
+  "#{install_path}/lib/simpleble-c.lib" # Windows uses .lib files - simpleble-c
 else
   "#{install_path}/lib/libsimplecble.a" # Unix uses .a files
 end
@@ -80,8 +80,8 @@ $LDFLAGS << " -L#{install_path}/lib"
 
 case platform
 when :windows
-  # Use the correct library name that SimpleBLE build system creates
-  $LDFLAGS << " -lsimpleble"  # Correct spelling
+  # Use the actual library name that SimpleBLE build system creates  
+  $LDFLAGS << " -lsimpleble-c"  # simpleble-c
 else
   $LDFLAGS << " -lsimplecble"
   # Link static libraries (needed for proper symbol resolution)
