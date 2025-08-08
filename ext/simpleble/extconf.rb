@@ -50,24 +50,30 @@ unless Dir.exist?(simpleble_root)
 end
 
 # Include paths (C++ and C API headers)
-puts "DEBUG: Setting up include paths:"
-puts "DEBUG: -I#{include_root}"
-puts "DEBUG: -I#{include_root}/simpleble"  
-puts "DEBUG: -I#{include_root}/simpleble_c"
-
 $INCFLAGS << " -I#{include_root}"
 $INCFLAGS << " -I#{include_root}/simpleble"
 $INCFLAGS << " -I#{include_root}/simpleble_c"
 
+# Add dependencies for SimpleBLE (kvn library)
+simpleble_deps_root = File.expand_path('../../vendor/simpleble/dependencies/external', __dir__)
+$INCFLAGS << " -I#{simpleble_deps_root}"
+
+# Add SimpleBLE source directories for internal headers
+$INCFLAGS << " -I#{src_root}"
+$INCFLAGS << " -I#{src_root}/frontends/base"
+$INCFLAGS << " -I#{src_root}/backends/common"
+case platform
+when :macos
+  $INCFLAGS << " -I#{src_root}/backends/macos"
+when :linux  
+  $INCFLAGS << " -I#{src_root}/backends/linux"
+when :windows
+  $INCFLAGS << " -I#{src_root}/backends/windows"
+end
+
 # Ensure required export header exists (upstream layout may omit it depending on shallow vendor state)
 export_header = File.join(include_root, 'simpleble', 'export.h')
-puts "DEBUG: Checking for export.h at: #{export_header}"
-puts "DEBUG: File exists? #{File.exist?(export_header)}"
-puts "DEBUG: include_root: #{include_root}"
-puts "DEBUG: Directory exists? #{Dir.exist?(include_root)}"
-
 unless File.exist?(export_header)
-  puts "DEBUG: Creating missing export.h header"
   FileUtils.mkdir_p(File.dirname(export_header))
   File.write(export_header, <<~H)
     #pragma once
@@ -86,9 +92,7 @@ unless File.exist?(export_header)
       #endif
     #endif
   H
-  puts "Generated missing simpleble/export.h at #{export_header}"
-else
-  puts "DEBUG: export.h already exists, using existing file"
+  puts "Generated missing simpleble/export.h"
 end
 
 # Select backend folders allowed per platform
@@ -121,9 +125,16 @@ FileUtils.mkdir_p(stage_dir)
 
 copy_files = filtered_cpp + wrapper_cpp
 copy_files.each do |src|
-  rel = src.sub(src_root + '/', '').sub(src_c_root + '/', '')
-  target = File.join(stage_dir, rel)
-  FileUtils.mkdir_p(File.dirname(target))
+  # Flatten directory structure to avoid object file path mismatches
+  basename = File.basename(src)
+  target = File.join(stage_dir, basename)
+  
+  # Handle filename collisions by prefixing with directory name
+  if File.exist?(target)
+    parent_dir = File.basename(File.dirname(src))
+    target = File.join(stage_dir, "#{parent_dir}_#{basename}")
+  end
+  
   FileUtils.cp(src, target)
 end
 
@@ -132,10 +143,15 @@ puts "Staged #{copy_files.size} SimpleBLE source files into tmp_src/ (platform=#
 # Windows now always attempts to build the real backend; if the required SDK/toolchain
 # (C++/WinRT, Windows 10+ SDK) is missing, the build should fail rather than stub.
 
-# Source list for mkmf (relative paths)
-ext_sources = Dir.glob(File.join('tmp_src', '**', '*.cpp')) + ['simpleble_ruby.c']
+# Source list for mkmf (relative paths) 
+# Since all sources are now flattened in tmp_src/, we can use simple basenames
+cpp_sources = Dir.glob(File.join('tmp_src', '*.cpp')).map { |f| File.basename(f) }
+ext_sources = cpp_sources + ['simpleble_ruby.c']
 $srcs = ext_sources
 $objs = ext_sources.map { |s| File.basename(s).sub(/\.(cpp|c)$/,'') + '.o' }
+
+# Add tmp_src to VPATH so make can find the C++ sources
+$VPATH << ':tmp_src'
 
 # Suppress warnings for cleaner compilation
 $CXXFLAGS << ' -Wno-deprecated-declarations -Wno-unused-parameter'
