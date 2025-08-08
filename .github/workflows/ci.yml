@@ -39,7 +39,7 @@ jobs:
         run: |
           choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y --no-progress --limit-output
           # Install MSYS2 development tools for Ruby extensions
-          C:\msys64\usr\bin\pacman.exe -S --noconfirm mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake
+          /c/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake
         shell: bash
 
       - name: Install system dependencies (Linux)
