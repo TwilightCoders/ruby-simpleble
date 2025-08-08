@@ -34,14 +34,35 @@ end
 
 # Build SimpleBLE library if not present
 vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
-install_path = "#{vendor_path}/install_simplecble"
 
-unless File.exist?("#{install_path}/lib/libsimplecble.a")
+# Different install paths for Windows vs Unix
+install_path = case platform
+when :windows
+  "#{vendor_path}/build_simpleble/install"
+else
+  "#{vendor_path}/install_simplecble"
+end
+
+# Check for library existence (different file extensions on Windows)
+library_file = case platform
+when :windows
+  "#{install_path}/lib/simpleble.lib" # Windows uses .lib files
+else
+  "#{install_path}/lib/libsimplecble.a" # Unix uses .a files
+end
+
+unless File.exist?(library_file)
   puts "Building SimpleBLE library..."
   Dir.chdir(vendor_path) do
     case platform
     when :windows
-      system('utils\\build_lib.bat simplecble') || abort("Failed to build SimpleBLE on Windows")
+      # Auto-detect Windows architecture
+      arch = case RUBY_PLATFORM
+      when /i386/, /x86/ then 'x86'
+      when /x86_64/, /x64/, /amd64/ then 'x64'
+      else 'x64' # default to x64 for unknown architectures
+      end
+      system("utils\\build_lib.bat -arch #{arch}") || abort("Failed to build SimpleBLE on Windows")
     else
       system('./utils/build_lib.sh simplecble') || abort("Failed to build SimpleBLE")
     end
