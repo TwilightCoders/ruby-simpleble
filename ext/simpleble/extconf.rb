@@ -44,9 +44,10 @@ else
 end
 
 # Check for library existence (different file extensions on Windows)
+# Note: SimpleBLE build system inconsistently spells the library name as "simbleble" (missing P)
 library_file = case platform
 when :windows
-  "#{install_path}/lib/simpleble.lib" # Windows uses .lib files
+  "#{install_path}/lib/simbleble.lib" # Windows uses .lib files (note: missing P in actual filename!)
 else
   "#{install_path}/lib/libsimplecble.a" # Unix uses .a files
 end
@@ -79,10 +80,16 @@ $INCFLAGS << " -I#{install_path}/include/simplecble"
 
 # Library paths and linking  
 $LDFLAGS << " -L#{install_path}/lib"
-$LDFLAGS << " -lsimplecble"
 
-# Link static libraries (needed for proper symbol resolution)
-$LDFLAGS << " #{install_path}/lib/libsimplecble.a"
+case platform
+when :windows
+  # Use the actual (misspelled) library name that SimpleBLE build system creates
+  $LDFLAGS << " -lsimbleble"  # Note: missing P in actual library name!
+else
+  $LDFLAGS << " -lsimplecble"
+  # Link static libraries (needed for proper symbol resolution)
+  $LDFLAGS << " #{install_path}/lib/libsimplecble.a"
+end
 
 # Suppress warnings for cleaner compilation
 $CXXFLAGS << ' -Wno-deprecated-declarations -Wno-unused-parameter'
