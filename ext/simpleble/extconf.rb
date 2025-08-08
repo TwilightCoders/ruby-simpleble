@@ -51,7 +51,11 @@ else
   "#{install_path}/lib/libsimplecble.a" # Unix uses .a files
 end
 
-unless File.exist?(library_file)
+puts "DEBUG: Looking for library at: #{library_file}"
+puts "DEBUG: SKIP_VENDOR_BUILD = #{ENV['SKIP_VENDOR_BUILD']}"
+puts "DEBUG: File exists? #{File.exist?(library_file)}"
+
+unless File.exist?(library_file) || ENV['SKIP_VENDOR_BUILD'] == '1'
   puts "Building SimpleBLE library..."
   Dir.chdir(vendor_path) do
     case platform
