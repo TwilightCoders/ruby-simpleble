@@ -50,13 +50,24 @@ unless Dir.exist?(simpleble_root)
 end
 
 # Include paths (C++ and C API headers)
+puts "DEBUG: Setting up include paths:"
+puts "DEBUG: -I#{include_root}"
+puts "DEBUG: -I#{include_root}/simpleble"  
+puts "DEBUG: -I#{include_root}/simpleble_c"
+
 $INCFLAGS << " -I#{include_root}"
 $INCFLAGS << " -I#{include_root}/simpleble"
 $INCFLAGS << " -I#{include_root}/simpleble_c"
 
 # Ensure required export header exists (upstream layout may omit it depending on shallow vendor state)
 export_header = File.join(include_root, 'simpleble', 'export.h')
+puts "DEBUG: Checking for export.h at: #{export_header}"
+puts "DEBUG: File exists? #{File.exist?(export_header)}"
+puts "DEBUG: include_root: #{include_root}"
+puts "DEBUG: Directory exists? #{Dir.exist?(include_root)}"
+
 unless File.exist?(export_header)
+  puts "DEBUG: Creating missing export.h header"
   FileUtils.mkdir_p(File.dirname(export_header))
   File.write(export_header, <<~H)
     #pragma once
@@ -75,7 +86,9 @@ unless File.exist?(export_header)
       #endif
     #endif
   H
-  puts "Generated missing simpleble/export.h"
+  puts "Generated missing simpleble/export.h at #{export_header}"
+else
+  puts "DEBUG: export.h already exists, using existing file"
 end
 
 # Select backend folders allowed per platform
