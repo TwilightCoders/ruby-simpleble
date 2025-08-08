@@ -40,7 +40,7 @@ install_path = case platform
 when :windows
   "#{vendor_path}/build_simpleble/install"
 else
-  "#{vendor_path}/install_simplecble"
+  "#{vendor_path}/install_simplecble"  # Note: SimpleBLE creates "simplecble" (without P)
 end
 
 # Check for library existence (different file extensions on Windows)
