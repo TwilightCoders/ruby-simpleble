@@ -1,14 +1,8 @@
 require 'mkmf'
 require 'fileutils'
 
-# High-level strategy: compile SimpleBLE C++ and C wrapper sources directly from the
-# vendor submodule instead of linking prebuilt libraries. We DO NOT commit those
-# sources; we stage required .cpp files into a build-local tmp_src directory.
-
 $CXXFLAGS << ' -std=c++17 -O3 -Wall -Wextra'
 $CFLAGS << ' -std=c99 -O3 -Wall -Wextra'
-$CXXFLAGS << ' -DSIMPLEBLE_BUILD'
-$CFLAGS << ' -DSIMPLEBLE_BUILD'
 
 platform = case RUBY_PLATFORM
 when /darwin/ then :macos
@@ -30,128 +24,40 @@ when :linux
   $LDFLAGS << ' -ldbus-1 -lstdc++ -lpthread'
 when :windows
   $CXXFLAGS << ' -DSIMPLEBLE_WINDOWS'
-  # Enable C++/WinRT (headers are header-only but need /EHsc and sometimes /bigobj)
   if RbConfig::CONFIG['CC'] =~ /cl(\.exe)?$/i
     $CXXFLAGS << ' /EHsc /bigobj'
   else
     $CXXFLAGS << ' -fexceptions'
   end
-  # Link necessary Windows system libs; windowsapp provides WinRT activation
   $LDFLAGS << ' -lole32 -loleaut32 -lws2_32 -liphlpapi -lbcrypt -lruntimeobject'
 end
 
-simpleble_root = File.expand_path('../../vendor/simpleble/simpleble', __dir__)
-src_root       = File.join(simpleble_root, 'src')
-src_c_root     = File.join(simpleble_root, 'src_c')
-include_root   = File.join(simpleble_root, 'include')
+# Build SimpleBLE library if not present
+vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
+install_path = "#{vendor_path}/install_simplecble"
 
-unless Dir.exist?(simpleble_root)
-  abort "SimpleBLE submodule missing at #{simpleble_root}. Run: git submodule update --init --recursive"
-end
-
-# Include paths (C++ and C API headers)
-$INCFLAGS << " -I#{include_root}"
-$INCFLAGS << " -I#{include_root}/simpleble"
-$INCFLAGS << " -I#{include_root}/simpleble_c"
-
-# Add dependencies for SimpleBLE (kvn library)
-simpleble_deps_root = File.expand_path('../../vendor/simpleble/dependencies/external', __dir__)
-$INCFLAGS << " -I#{simpleble_deps_root}"
-
-# Add SimpleBLE source directories for internal headers
-$INCFLAGS << " -I#{src_root}"
-$INCFLAGS << " -I#{src_root}/frontends/base"
-$INCFLAGS << " -I#{src_root}/backends/common"
-case platform
-when :macos
-  $INCFLAGS << " -I#{src_root}/backends/macos"
-when :linux  
-  $INCFLAGS << " -I#{src_root}/backends/linux"
-when :windows
-  $INCFLAGS << " -I#{src_root}/backends/windows"
-end
-
-# Ensure required export header exists (upstream layout may omit it depending on shallow vendor state)
-export_header = File.join(include_root, 'simpleble', 'export.h')
-unless File.exist?(export_header)
-  FileUtils.mkdir_p(File.dirname(export_header))
-  File.write(export_header, <<~H)
-    #pragma once
-    // Auto-generated minimal export header to satisfy SimpleBLE public includes.
-    #if defined(_WIN32) || defined(_WIN64)
-      #if defined(SIMPLEBLE_BUILD)
-        #define SIMPLEBLE_EXPORT __declspec(dllexport)
-      #else
-        #define SIMPLEBLE_EXPORT __declspec(dllimport)
-      #endif
-    #else
-      #if defined(__GNUC__) || defined(__clang__)
-        #define SIMPLEBLE_EXPORT __attribute__((visibility("default")))
-      #else
-        #define SIMPLEBLE_EXPORT
-      #endif
-    #endif
-  H
-  puts "Generated missing simpleble/export.h"
-end
-
-# Select backend folders allowed per platform
-allowed_backends = case platform
-when :macos then %w[macos common]
-when :linux then %w[linux common]
-when :windows
-  %w[windows common]
-else %w[common]
-end
-excluded_backends = %w[android linux_legacy plain]
-
-all_cpp = Dir.glob(File.join(src_root, '**', '*.cpp'))
-filtered_cpp = all_cpp.select do |f|
-  if f.include?('/backends/')
-    b = f.split('/backends/').last.split('/').first
-    next false if excluded_backends.include?(b)
-    allowed_backends.include?(b)
-  else
-    true
+unless File.exist?("#{install_path}/lib/libsimplecble.a")
+  puts "Building SimpleBLE library..."
+  Dir.chdir(vendor_path) do
+    case platform
+    when :windows
+      system('utils\\build_lib.bat simplecble') || abort("Failed to build SimpleBLE on Windows")
+    else
+      system('./utils/build_lib.sh simplecble') || abort("Failed to build SimpleBLE")
+    end
   end
 end
 
-# Add C wrapper sources (exclude deprecated directory)
-wrapper_cpp = Dir.glob(File.join(src_c_root, '*.cpp')).reject { |f| f =~ /DEPRECATED/ }
+# Include directories - use only installed headers to avoid conflicts  
+$INCFLAGS << " -I#{install_path}/include"
+$INCFLAGS << " -I#{install_path}/include/simplecble"
 
-stage_dir = File.join(__dir__, 'tmp_src')
-FileUtils.rm_rf(stage_dir)
-FileUtils.mkdir_p(stage_dir)
+# Library paths and linking  
+$LDFLAGS << " -L#{install_path}/lib"
+$LDFLAGS << " -lsimplecble"
 
-copy_files = filtered_cpp + wrapper_cpp
-copy_files.each do |src|
-  # Flatten directory structure to avoid object file path mismatches
-  basename = File.basename(src)
-  target = File.join(stage_dir, basename)
-  
-  # Handle filename collisions by prefixing with directory name
-  if File.exist?(target)
-    parent_dir = File.basename(File.dirname(src))
-    target = File.join(stage_dir, "#{parent_dir}_#{basename}")
-  end
-  
-  FileUtils.cp(src, target)
-end
-
-puts "Staged #{copy_files.size} SimpleBLE source files into tmp_src/ (platform=#{platform})"
-
-# Windows now always attempts to build the real backend; if the required SDK/toolchain
-# (C++/WinRT, Windows 10+ SDK) is missing, the build should fail rather than stub.
-
-# Source list for mkmf (relative paths) 
-# Since all sources are now flattened in tmp_src/, we can use simple basenames
-cpp_sources = Dir.glob(File.join('tmp_src', '*.cpp')).map { |f| File.basename(f) }
-ext_sources = cpp_sources + ['simpleble_ruby.c']
-$srcs = ext_sources
-$objs = ext_sources.map { |s| File.basename(s).sub(/\.(cpp|c)$/,'') + '.o' }
-
-# Add tmp_src to VPATH so make can find the C++ sources
-$VPATH << ':tmp_src'
+# Link static libraries (needed for proper symbol resolution)
+$LDFLAGS << " #{install_path}/lib/libsimplecble.a"
 
 # Suppress warnings for cleaner compilation
 $CXXFLAGS << ' -Wno-deprecated-declarations -Wno-unused-parameter'
