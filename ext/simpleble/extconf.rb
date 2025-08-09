@@ -56,6 +56,8 @@ end
 puts "DEBUG: Looking for library at: #{library_file}"
 puts "DEBUG: SKIP_VENDOR_BUILD = #{ENV['SKIP_VENDOR_BUILD']}"
 puts "DEBUG: File exists? #{File.exist?(library_file)}"
+puts "DEBUG: Install path contents:"
+Dir["#{install_path}/lib/*"].each { |f| puts "  #{f}" } rescue puts "  (directory not found)"
 
 unless File.exist?(library_file) || ENV['SKIP_VENDOR_BUILD'] == '1'
   puts "Building SimpleBLE library..."

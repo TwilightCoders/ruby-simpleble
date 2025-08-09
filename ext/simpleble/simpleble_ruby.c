@@ -48,7 +48,6 @@ static const rb_data_type_t adapter_type = {
     {0, adapter_free, 0, 0},
     0, 0,
     RUBY_TYPED_FREE_IMMEDIATELY,
-    {0}  /* reserved field */
 };
 
 static void peripheral_free(void* ptr) {
@@ -64,7 +63,6 @@ static const rb_data_type_t peripheral_type = {
     {0, peripheral_free, 0, 0},
     0, 0,
     RUBY_TYPED_FREE_IMMEDIATELY,
-    {0}  /* reserved field */
 };
 
 // Helper functions
