@@ -259,6 +259,39 @@ Platform BLE APIs (CoreBluetooth/BlueZ/WinRT)
 | **Linux** | 🚧 Ready | BlueZ/DBus | Build system ready, needs testing |
 | **Windows** | 🚧 Ready | WinRT | Build system ready, needs testing |
 
+## ⚡ CI Performance & Caching
+
+Building the SimpleBLE core for every Ruby version slows the matrix. Two knobs:
+
+1. `SIMPLEBLE_PREBUILT_LIB` – point to a prebuilt static library (and headers) so only the Ruby bridge compiles.
+2. `SIMPLEBLE_REUSE_OBJECTS=1` – skip `make clean` and reuse previously cached `.o` files.
+
+### Prebuilt Flow
+Create a warmup job that builds once, packages `tmp_flat/*.o` (or a consolidated `libsimpleble_core.a` you produce via `ar`), uploads as an artifact, then matrix jobs download and set:
+```
+env:
+       SIMPLEBLE_PREBUILT_LIB: path/to/libsimpleble_core.a
+```
+`extconf.rb` detects this and links only the Ruby layer.
+
+### Object Reuse Flow
+Use `actions/cache` keyed on OS + hash of `vendor/simpleble/**`:
+```
+- uses: actions/cache@v4
+       with:
+              path: ext/simpleble/tmp_flat
+              key: simpleble-obj-${{ runner.os }}-${{ hashFiles('vendor/simpleble/**') }}
+```
+Then set `SIMPLEBLE_REUSE_OBJECTS: 1` so the compile task skips cleaning.
+
+### Variables Summary
+| Var | Purpose |
+|-----|---------|
+| `SIMPLEBLE_PREBUILT_LIB` | Path to prebuilt SimpleBLE static lib to link instead of compiling sources |
+| `SIMPLEBLE_REUSE_OBJECTS` | If `1`, do not run `make clean`; rely on cached object files |
+
+Regenerate caches whenever the SimpleBLE submodule changes.
+
 ## 🤝 Contributing
 
 1. Fork the repository

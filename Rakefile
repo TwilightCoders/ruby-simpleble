@@ -26,14 +26,23 @@ def copy_native_extension
   dest = File.join('lib', 'simpleble', File.basename(src))
   FileUtils.cp(src, dest)
   puts "✅ Copied #{src} -> #{dest}"
+  if RUBY_PLATFORM =~ /mswin|mingw|cygwin/
+    dlls = Dir['vendor/simpleble/build_simpleble/bin/Release/*.dll']
+    dlls.each do |dll|
+      FileUtils.cp(dll, File.join('lib', 'simpleble', File.basename(dll)))
+      puts "🔗 Copied dependency DLL #{dll}"
+    end
+    puts "ℹ️ No dependency DLLs found" if dlls.empty?
+  end
 end
 
 desc "Compile the C extension"
 task :compile do
   Dir.chdir('ext/simpleble') do
-    ruby 'extconf.rb'
-    sh 'make clean'
-    sh 'make'
+  reuse = ENV['SIMPLEBLE_REUSE_OBJECTS'] == '1'
+  ruby 'extconf.rb'
+  sh 'make clean' unless reuse
+  sh( reuse ? 'make -j' : 'make')
   end
   copy_native_extension
 end

@@ -7,10 +7,7 @@ on:
     branches: [main, develop]
 
 permissions:
-  actions: write
   contents: read
-  id-token: write
-  packages: write
 
 jobs:
   test:
@@ -22,6 +19,14 @@ jobs:
         # Focus on Windows only while stabilizing the build
         os: [windows-latest]
         ruby-version: ["2.7", "3.0", "3.1", "3.2", "3.3"]
+        include:
+          # Keep platform-specific steps for future expansion
+          - os: ubuntu-latest
+            ruby-version: "3.3"
+            install_deps: "sudo apt-get update && sudo apt-get install -y build-essential libdbus-1-dev cmake"
+          - os: macos-latest
+            ruby-version: "3.3"
+            install_deps: "echo 'Using system CoreBluetooth framework'"
 
     steps:
       - uses: actions/checkout@v4
@@ -34,32 +39,9 @@ jobs:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true
 
-      - name: Install system dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y --no-progress --limit-output
-          # Ensure MSYS2 development tools are available for Ruby C extensions
-          echo "Installing MSYS2 development tools for Ruby extension compilation..."
-          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          if (Test-Path "C:\hostedtoolcache\windows\Ruby\3.0.7\x64\msys64\usr\bin\pacman.exe") {
-            & "C:\hostedtoolcache\windows\Ruby\3.0.7\x64\msys64\usr\bin\pacman.exe" -Sy --noconfirm
-            & "C:\hostedtoolcache\windows\Ruby\3.0.7\x64\msys64\usr\bin\pacman.exe" -S --noconfirm mingw-w64-x86_64-toolchain
-          } else {
-            echo "MSYS2 pacman not found in expected location"
-          }
-        shell: powershell
-
-      - name: Install system dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libdbus-1-dev cmake
-
-      - name: Install system dependencies (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          # macOS uses system frameworks, no additional dependencies needed
-          echo "Using system CoreBluetooth framework"
+      - name: Install system dependencies
+        if: matrix.install_deps
+        run: ${{ matrix.install_deps }}
 
       - name: Compile extension (let extconf.rb handle everything)
         env:
@@ -92,16 +74,8 @@ jobs:
           SIMPLEBLE_DEBUG: "1"
         run: bundle exec rspec --backtrace
 
-      - name: Upload coverage artifact (Ruby 3.3, Ubuntu only)
-        if: matrix.ruby-version == '3.3' && matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage/
-          retention-days: 1
-
-      - name: Run RuboCop (Ruby 3.3, Ubuntu only)
-        if: matrix.ruby-version == '3.3' && matrix.os == 'ubuntu-latest'
+      - name: Run RuboCop (Ruby 3.3 only)
+        if: matrix.ruby-version == '3.3'
         run: bundle exec rubocop || true
         continue-on-error: true
 
