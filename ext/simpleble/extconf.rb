@@ -44,7 +44,7 @@ prebuilt_lib = ENV['SIMPLEBLE_PREBUILT_LIB']
 if prebuilt_lib && File.exist?(prebuilt_lib)
   puts "Using prebuilt SimpleBLE core: #{prebuilt_lib}"
   $INCFLAGS << " -I#{install_path}/include"
-  $INCFLAGS << " -I#{install_path}/include/simpleble_c"
+  $INCFLAGS << " -I#{install_path}/include/simplecble"
   $LOCAL_LIBS << " #{prebuilt_lib}"
   abort 'C standard library headers missing' unless have_header('string.h')
   create_makefile('simpleble/simpleble')
@@ -77,7 +77,7 @@ unless expected_libs.all? { |f| File.exist?(f) } || ENV['SKIP_VENDOR_BUILD'] == 
 end
 
 $INCFLAGS << " -I#{install_path}/include"
-$INCFLAGS << " -I#{install_path}/include/simpleble_c"
+$INCFLAGS << " -I#{install_path}/include/simplecble"
 $LDFLAGS  << " -L#{install_path}/lib"
 
 case platform
