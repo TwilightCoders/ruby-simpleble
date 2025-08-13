@@ -1,27 +1,34 @@
 require 'mkmf'
 require 'fileutils'
 
+# Platform detection helpers
+def windows?
+  RUBY_PLATFORM =~ /mswin|mingw|cygwin/
+end
+
+def darwin?
+  RUBY_PLATFORM =~ /darwin/
+end
+
+def linux?
+  RUBY_PLATFORM =~ /linux/
+end
+
+# Platform-specific compiler flags
 $CXXFLAGS << ' -std=c++17 -O3 -Wall -Wextra'
 $CFLAGS   << ' -std=c99 -O3 -Wall -Wextra'
 
-platform = case RUBY_PLATFORM
-when /darwin/ then :macos
-when /linux/ then :linux
-when /mswin|mingw|cygwin/ then :windows
-else :other
-end
-
-case platform
-when :macos
+case RUBY_PLATFORM
+when /darwin/
   $CXXFLAGS << ' -DSIMPLEBLE_MACOS'
   $LDFLAGS  << ' -framework Foundation -framework CoreBluetooth -framework IOBluetooth'
-when :linux
+when /linux/
   unless have_library('dbus-1')
     abort 'libdbus-1-dev (DBus) is required on Linux'
   end
   $CXXFLAGS << ' -DSIMPLEBLE_LINUX'
   $LDFLAGS  << ' -ldbus-1 -lstdc++ -lpthread'
-when :windows
+when /mswin|mingw|cygwin/
   $CXXFLAGS << ' -DSIMPLEBLE_WINDOWS -D_WIN32_WINNT=0x0A00'
   if RbConfig::CONFIG['CC'] =~ /cl(\.exe)?$/i
     $CXXFLAGS << ' /EHsc /bigobj'
@@ -31,79 +38,109 @@ when :windows
   $LDFLAGS << ' -lole32 -loleaut32 -lws2_32 -liphlpapi -lbcrypt -lruntimeobject'
 end
 
-vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
-install_path = case platform
-when :windows
-  File.join(vendor_path, 'build_simpleble', 'install')
-else
-  File.join(vendor_path, 'install_simplecble')
-end
-
-# Allow using a prebuilt core library (from warmup job)
-prebuilt_lib = ENV['SIMPLEBLE_PREBUILT_LIB']
-if prebuilt_lib && File.exist?(prebuilt_lib)
-  puts "Using prebuilt SimpleBLE core: #{prebuilt_lib}"
-  $INCFLAGS << " -I#{install_path}/include"
-  case platform
-  when :windows
-    $INCFLAGS << " -I#{install_path}/include/simpleble_c"
-  else
-    $INCFLAGS << " -I#{install_path}/include/simplecble"
-  end
-  $LOCAL_LIBS << " #{prebuilt_lib}"
-  abort 'C standard library headers missing' unless have_header('string.h')
-  create_makefile('simpleble/simpleble')
-  exit 0
-end
-
-# Build vendor library if missing
-def build_vendor(platform, vendor_path)
+# Build SimpleBLE library using its native build system
+def build_simpleble
+  vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
+  
+  puts "Building SimpleBLE library..."
   Dir.chdir(vendor_path) do
-    case platform
-    when :windows
-      puts 'Building SimpleBLE (CMake/MSBuild)'
-      system('utils\\build_lib.bat') || abort('Failed to build SimpleBLE on Windows')
+    if windows?
+      # Try building without platform specification first (avoids Ninja issues)
+      unless system('utils\\build_lib.bat')
+        # Fallback: auto-detect Windows architecture
+        arch = case RUBY_PLATFORM
+        when /i386/, /x86/ then 'x86'
+        when /x86_64/, /x64/, /amd64/ then 'x64'
+        else 'x64' # default to x64
+        end
+        system("utils\\build_lib.bat -arch #{arch}") || abort("Failed to build SimpleBLE on Windows")
+      end
     else
-      system('./utils/build_lib.sh simplecble') || abort('Failed to build SimpleBLE')
+      system('./utils/build_lib.sh simplecble') || abort('Failed to build SimpleBLE on Unix')
     end
   end
 end
 
-expected_libs = []
-case platform
-when :windows
-  expected_libs << File.join(install_path, 'lib', 'simpleble-c.lib')
-else
-  expected_libs << File.join(install_path, 'lib', 'libsimplecble.a')
+# Find SimpleBLE headers using mkmf - try multiple possible locations
+def find_simpleble_headers
+  header_paths = []
+  
+  # Add vendor install directories to search path
+  vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
+  
+  if windows?
+    header_paths << File.join(vendor_path, 'build_simpleble', 'install', 'include')
+  else
+    header_paths << File.join(vendor_path, 'install_simplecble', 'include')
+  end
+  
+  # Try to find the main adapter header in different subdirectories
+  header_found = false
+  
+  # Windows typically uses simpleble_c/, Unix uses simplecble/
+  %w[simpleble_c simplecble].each do |subdir|
+    header_paths.each do |base_path|
+      full_path = File.join(base_path, subdir)
+      if File.directory?(full_path)
+        $INCFLAGS << " -I#{base_path} -I#{full_path}"
+        puts "Found SimpleBLE headers in: #{full_path}"
+        header_found = true
+        return subdir  # Return which subdirectory we found
+      end
+    end
+  end
+  
+  unless header_found
+    abort "SimpleBLE headers not found. Searched paths: #{header_paths.inspect}"
+  end
 end
 
-unless expected_libs.all? { |f| File.exist?(f) } || ENV['SKIP_VENDOR_BUILD'] == '1'
-  build_vendor(platform, vendor_path)
+# Find SimpleBLE libraries using mkmf
+def find_simpleble_libraries
+  vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
+  
+  if windows?
+    lib_path = File.join(vendor_path, 'build_simpleble', 'install', 'lib')
+    $LDFLAGS << " -L#{lib_path}"
+    
+    # Try to link with simpleble-c library
+    unless have_library('simpleble-c', nil, lib_path)
+      abort "SimpleBLE library (simpleble-c) not found in #{lib_path}"
+    end
+  else
+    lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
+    $LDFLAGS << " -L#{lib_path}"
+    
+    # Try to link with simplecble library
+    unless have_library('simplecble', nil, lib_path)
+      abort "SimpleBLE library (simplecble) not found in #{lib_path}"
+    end
+  end
+  
+  puts "Found SimpleBLE library in: #{lib_path}"
 end
 
-# Add include paths - Windows and Unix have different directory structures
-$INCFLAGS << " -I#{install_path}/include"
-case platform
-when :windows
-  $INCFLAGS << " -I#{install_path}/include/simpleble_c"
-else
-  $INCFLAGS << " -I#{install_path}/include/simplecble"
-end
-$LDFLAGS  << " -L#{install_path}/lib"
-
-case platform
-when :windows
-  $LDFLAGS << ' -lsimpleble-c'
-else
-  $LDFLAGS << ' -lsimplecble'
-  # Also force static link path for clarity
-  static_lib = File.join(install_path, 'lib', 'libsimplecble.a')
-  $LDFLAGS << " #{static_lib}" if File.exist?(static_lib)
+# Main build process
+unless ENV['SKIP_VENDOR_BUILD'] == '1'
+  build_simpleble
 end
 
+# Use mkmf to find headers and libraries
+header_subdir = find_simpleble_headers
+find_simpleble_libraries
+
+# Add platform-specific warning suppressions
 $CXXFLAGS << ' -Wno-deprecated-declarations -Wno-unused-parameter'
 $CFLAGS   << ' -Wno-unused-parameter'
 
+# Verify we can find basic system headers
 abort 'C standard library headers missing' unless have_header('string.h')
 
+# Create the Makefile
 create_makefile('simpleble/simpleble')
+
+puts ""
+puts "SimpleBLE Ruby extension configured successfully!"
+puts "Platform: #{RUBY_PLATFORM}"
+puts "Header subdirectory: #{header_subdir}"
+puts ""

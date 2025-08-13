@@ -2,17 +2,10 @@
 #include <ruby.h>
 #include <stdlib.h>
 
-// SimpleBLE C API - use only the installed headers
-// Windows installs to simpleble_c/, Unix installs to simplecble/
-#ifdef _WIN32
-#include <simpleble_c/adapter.h>
-#include <simpleble_c/peripheral.h>
-#include <simpleble_c/types.h>
-#else
-#include <simplecble/adapter.h>
-#include <simplecble/peripheral.h>
-#include <simplecble/types.h>
-#endif
+// SimpleBLE C API - extconf.rb dynamically configures the correct include paths
+#include <adapter.h>
+#include <peripheral.h>
+#include <types.h>
 
 // Module and class definitions
 static VALUE mSimpleBLE;
