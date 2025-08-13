@@ -29,7 +29,17 @@ else
   end
   
   inc_path = File.join(vendor_path, 'install_simplecble', 'include')
-  $INCFLAGS << " -I#{inc_path} -I#{inc_path}/simplecble -I#{inc_path}/simpleble_c"
+  $INCFLAGS << " -I#{inc_path} -I#{inc_path}/simplecble"
+  
+  # Create simpleble_c symlink to simplecble for header compatibility
+  simpleble_c_path = File.join(inc_path, 'simpleble_c')
+  simplecble_path = File.join(inc_path, 'simplecble')
+  unless File.exist?(simpleble_c_path)
+    if File.directory?(simplecble_path)
+      File.symlink('simplecble', simpleble_c_path)
+      puts "Created symlink: simpleble_c -> simplecble"
+    end
+  end
   
   lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
   $LDFLAGS << " #{lib_path}/libsimplecble.a"
