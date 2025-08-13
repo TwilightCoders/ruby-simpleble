@@ -101,39 +101,14 @@ def find_simpleble_libraries
   
   if windows?
     lib_path = File.join(vendor_path, 'build_simpleble', 'install', 'lib')
-    puts "Searching for Windows SimpleBLE libraries in: #{lib_path}"
-    
-    # List what's actually in the directory
-    if File.directory?(lib_path)
-      Dir.entries(lib_path).each { |f| puts "  Found file: #{f}" }
-    else
-      abort "Library directory does not exist: #{lib_path}"
-    end
-    
     $LDFLAGS << " -L#{lib_path}"
     
-    # Try to find and link the library file directly
-    lib_file = File.join(lib_path, 'simpleble-c.lib')
-    if File.exist?(lib_file)
-      puts "Found library file: #{lib_file}"
-      $LDFLAGS << " #{lib_file}"
-    else
-      # Try with have_library as fallback
-      unless have_library('simpleble-c')
-        abort "SimpleBLE library (simpleble-c) not found in #{lib_path}"
-      end
+    # Try to link with simpleble-c library
+    unless have_library('simpleble-c')
+      abort "SimpleBLE library (simpleble-c) not found in #{lib_path}"
     end
   else
     lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
-    puts "Searching for Unix SimpleBLE libraries in: #{lib_path}"
-    
-    # List what's actually in the directory  
-    if File.directory?(lib_path)
-      Dir.entries(lib_path).each { |f| puts "  Found file: #{f}" }
-    else
-      abort "Library directory does not exist: #{lib_path}"
-    end
-    
     $LDFLAGS << " -L#{lib_path}"
     
     # Try to link with simplecble library
@@ -142,7 +117,29 @@ def find_simpleble_libraries
     end
   end
   
-  puts "SimpleBLE library configuration completed for: #{lib_path}"
+  puts "Found SimpleBLE library in: #{lib_path}"
+end
+
+# Copy SimpleBLE DLLs to extension directory on Windows for runtime loading
+def copy_simpleble_dlls
+  return unless windows?
+  
+  vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
+  dll_source_path = File.join(vendor_path, 'build_simpleble', 'install', 'bin')
+  ext_path = File.dirname(__FILE__)
+  
+  # Copy SimpleBLE DLLs to the extension directory
+  %w[simpleble.dll simpleble-c.dll].each do |dll|
+    source = File.join(dll_source_path, dll)
+    target = File.join(ext_path, dll)
+    
+    if File.exist?(source)
+      FileUtils.cp(source, target)
+      puts "Copied #{dll} to extension directory"
+    else
+      puts "Warning: #{dll} not found at #{source}"
+    end
+  end
 end
 
 # Main build process
@@ -153,6 +150,9 @@ end
 # Use mkmf to find headers and libraries
 header_subdir = find_simpleble_headers
 find_simpleble_libraries
+
+# Copy DLLs for Windows runtime loading
+copy_simpleble_dlls
 
 # Add platform-specific warning suppressions
 $CXXFLAGS << ' -Wno-deprecated-declarations -Wno-unused-parameter'
