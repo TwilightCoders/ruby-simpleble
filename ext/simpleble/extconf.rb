@@ -120,22 +120,25 @@ def find_simpleble_libraries
   puts "Found SimpleBLE library in: #{lib_path}"
 end
 
-# Copy SimpleBLE DLLs to extension directory on Windows for runtime loading
+# Copy SimpleBLE DLLs to lib directory on Windows for runtime loading
 def copy_simpleble_dlls
   return unless windows?
   
   vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
   dll_source_path = File.join(vendor_path, 'build_simpleble', 'install', 'bin')
-  ext_path = File.dirname(__FILE__)
+  lib_simbleble_path = File.expand_path('../../lib/simpleble', __dir__)
   
-  # Copy SimpleBLE DLLs to the extension directory
+  # Ensure the lib/simpleble directory exists
+  FileUtils.mkdir_p(lib_simbleble_path)
+  
+  # Copy SimpleBLE DLLs to the lib/simpleble directory where the .so will be installed
   %w[simpleble.dll simpleble-c.dll].each do |dll|
     source = File.join(dll_source_path, dll)
-    target = File.join(ext_path, dll)
+    target = File.join(lib_simbleble_path, dll)
     
     if File.exist?(source)
       FileUtils.cp(source, target)
-      puts "Copied #{dll} to extension directory"
+      puts "Copied #{dll} to lib/simpleble directory"
     else
       puts "Warning: #{dll} not found at #{source}"
     end
