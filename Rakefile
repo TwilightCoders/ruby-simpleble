@@ -26,7 +26,15 @@ def copy_native_extension
   dest = File.join('lib', 'simpleble', File.basename(src))
   FileUtils.cp(src, dest)
   puts "✅ Copied #{src} -> #{dest}"
-  # Windows DLL copying removed - using static linking
+  if RUBY_PLATFORM =~ /mswin|mingw|cygwin/
+    # Copy SimpleBLE DLLs for Windows dynamic linking
+    dlls = Dir['vendor/simpleble/build_simpleble/install/bin/*.dll']
+    dlls.each do |dll|
+      FileUtils.cp(dll, File.join('lib', 'simpleble', File.basename(dll)))
+      puts "🔗 Copied dependency DLL #{dll}"
+    end
+    puts "ℹ️ No dependency DLLs found" if dlls.empty?
+  end
 end
 
 desc "Compile the C extension"
