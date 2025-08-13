@@ -95,26 +95,19 @@ def find_simpleble_headers
   end
 end
 
-# Find SimpleBLE libraries using mkmf - static linking approach
+# Find SimpleBLE libraries using mkmf - static linking approach  
 def find_simpleble_libraries
   vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
   
   if windows?
     lib_path = File.join(vendor_path, 'build_simpleble', 'install', 'lib')
     
-    # For static linking, link directly against the .lib files
-    static_lib = File.join(lib_path, 'simpleble-c.lib')
-    if File.exist?(static_lib)
-      puts "Using static linking with: #{static_lib}"
-      $LDFLAGS << " #{static_lib}"
-      
-      # Add Windows system libraries that SimpleBLE depends on  
-      # Based on SimpleBLE's Windows backend dependencies
-      $LDFLAGS << " -lole32 -loleaut32 -lws2_32 -liphlpapi -lbcrypt -lruntimeobject"
-      $LDFLAGS << " -lwindowsapp -luuid -lkernel32 -luser32 -ladvapi32"
-    else
-      abort "SimpleBLE static library not found: #{static_lib}"
-    end
+    # DIAGNOSTIC: Try without SimpleBLE library to see if basic loading works
+    puts "DIAGNOSTIC: Skipping SimpleBLE library linking to test basic extension loading"
+    
+    # Add Windows system libraries that SimpleBLE depends on  
+    $LDFLAGS << " -lole32 -loleaut32 -lws2_32 -liphlpapi -lbcrypt -lruntimeobject"
+    $LDFLAGS << " -lwindowsapp -luuid -lkernel32 -luser32 -ladvapi32"
   else
     lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
     
@@ -132,7 +125,7 @@ def find_simpleble_libraries
     end
   end
   
-  puts "SimpleBLE library configured for static linking"
+  puts "SimpleBLE library configured - diagnostic mode"
 end
 
 
