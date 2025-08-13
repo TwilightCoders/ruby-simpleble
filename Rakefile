@@ -33,6 +33,22 @@ def copy_native_extension
       FileUtils.cp(dll, File.join('lib', 'simpleble', File.basename(dll)))
       puts "🔗 Copied dependency DLL #{dll}"
     end
+    
+    # Also copy any potential runtime DLLs from system
+    %w[msvcr140.dll msvcp140.dll vcruntime140.dll].each do |sys_dll|
+      system_paths = [
+        "C:/Windows/System32/#{sys_dll}",
+        "C:/Windows/SysWOW64/#{sys_dll}"
+      ]
+      system_paths.each do |path|
+        if File.exist?(path)
+          FileUtils.cp(path, File.join('lib', 'simpleble', sys_dll))
+          puts "🔗 Copied system DLL #{path}"
+          break
+        end
+      end
+    end
+    
     puts "ℹ️ No dependency DLLs found" if dlls.empty?
   end
 end

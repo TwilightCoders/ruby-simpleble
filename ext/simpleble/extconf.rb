@@ -29,7 +29,7 @@ else
   end
   
   inc_path = File.join(vendor_path, 'install_simplecble', 'include')
-  $INCFLAGS << " -I#{inc_path} -I#{inc_path}/simplecble"
+  $INCFLAGS << " -I#{inc_path} -I#{inc_path}/simplecble -I#{inc_path}/simpleble_c"
   
   lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
   $LDFLAGS << " #{lib_path}/libsimplecble.a"
