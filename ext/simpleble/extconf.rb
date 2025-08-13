@@ -95,77 +95,44 @@ def find_simpleble_headers
   end
 end
 
-# Find SimpleBLE libraries using mkmf
+# Find SimpleBLE libraries using mkmf - static linking approach
 def find_simpleble_libraries
   vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
   
   if windows?
     lib_path = File.join(vendor_path, 'build_simpleble', 'install', 'lib')
-    $LDFLAGS << " -L#{lib_path}"
     
-    # Try to link with simpleble-c library
-    unless have_library('simpleble-c')
-      abort "SimpleBLE library (simpleble-c) not found in #{lib_path}"
+    # For static linking, link directly against the .lib files
+    static_lib = File.join(lib_path, 'simpleble-c.lib')
+    if File.exist?(static_lib)
+      puts "Using static linking with: #{static_lib}"
+      $LDFLAGS << " #{static_lib}"
+      
+      # Add Windows system libraries that SimpleBLE depends on
+      $LDFLAGS << " -lole32 -loleaut32 -lws2_32 -liphlpapi -lbcrypt -lruntimeobject"
+    else
+      abort "SimpleBLE static library not found: #{static_lib}"
     end
   else
     lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
-    $LDFLAGS << " -L#{lib_path}"
     
-    # Try to link with simplecble library
-    unless have_library('simplecble')
-      abort "SimpleBLE library (simplecble) not found in #{lib_path}"
+    # For Unix, try static library first, fall back to dynamic
+    static_lib = File.join(lib_path, 'libsimplecble.a')
+    if File.exist?(static_lib)
+      puts "Using static linking with: #{static_lib}"
+      $LDFLAGS << " #{static_lib}"
+    else
+      # Fallback to dynamic linking on Unix
+      $LDFLAGS << " -L#{lib_path}"
+      unless have_library('simplecble')
+        abort "SimpleBLE library (simplecble) not found in #{lib_path}"
+      end
     end
   end
   
-  puts "Found SimpleBLE library in: #{lib_path}"
+  puts "SimpleBLE library configured for static linking"
 end
 
-# Copy SimpleBLE DLLs to lib directory on Windows for runtime loading
-def copy_simpleble_dlls
-  return unless windows?
-  
-  vendor_path = File.expand_path('../../vendor/simpleble', __dir__)
-  dll_source_path = File.join(vendor_path, 'build_simpleble', 'install', 'bin')
-  lib_simbleble_path = File.expand_path('../../lib/simpleble', __dir__)
-  
-  # Ensure the lib/simpleble directory exists
-  FileUtils.mkdir_p(lib_simbleble_path)
-  
-  puts "Copying DLLs from: #{dll_source_path}"
-  puts "Copying DLLs to: #{lib_simbleble_path}"
-  
-  # List all files in source directory for debugging
-  if File.directory?(dll_source_path)
-    puts "Files in source directory:"
-    Dir.entries(dll_source_path).each { |f| puts "  #{f}" }
-  end
-  
-  # Copy SimpleBLE DLLs to the lib/simpleble directory where the .so will be installed
-  %w[simpleble.dll simpleble-c.dll].each do |dll|
-    source = File.join(dll_source_path, dll)
-    target = File.join(lib_simbleble_path, dll)
-    
-    if File.exist?(source)
-      FileUtils.cp(source, target)
-      puts "Copied #{dll} to lib/simpleble directory"
-      
-      # Verify the copy worked
-      if File.exist?(target)
-        puts "Verified: #{dll} exists in target location"
-      else
-        puts "ERROR: #{dll} copy failed!"
-      end
-    else
-      puts "Warning: #{dll} not found at #{source}"
-    end
-  end
-  
-  # List final contents of lib/simpleble directory
-  puts "Final contents of lib/simpleble:"
-  if File.directory?(lib_simbleble_path)
-    Dir.entries(lib_simbleble_path).each { |f| puts "  #{f}" }
-  end
-end
 
 # Main build process
 unless ENV['SKIP_VENDOR_BUILD'] == '1'
@@ -175,9 +142,6 @@ end
 # Use mkmf to find headers and libraries
 header_subdir = find_simpleble_headers
 find_simpleble_libraries
-
-# Copy DLLs for Windows runtime loading
-copy_simpleble_dlls
 
 # Add platform-specific warning suppressions
 $CXXFLAGS << ' -Wno-deprecated-declarations -Wno-unused-parameter'
