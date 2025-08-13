@@ -108,8 +108,10 @@ def find_simpleble_libraries
       puts "Using static linking with: #{static_lib}"
       $LDFLAGS << " #{static_lib}"
       
-      # Add Windows system libraries that SimpleBLE depends on
+      # Add Windows system libraries that SimpleBLE depends on  
+      # Based on SimpleBLE's Windows backend dependencies
       $LDFLAGS << " -lole32 -loleaut32 -lws2_32 -liphlpapi -lbcrypt -lruntimeobject"
+      $LDFLAGS << " -lwindowsapp -luuid -lkernel32 -luser32 -ladvapi32"
     else
       abort "SimpleBLE static library not found: #{static_lib}"
     end
