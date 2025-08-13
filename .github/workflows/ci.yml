@@ -63,34 +63,60 @@ jobs:
           echo "=== Windows DLL Dependency Analysis ==="
           echo "Analyzing SimpleBLE DLL dependencies to identify missing system libraries..."
           
-          # Find Visual Studio installation for dumpbin
-          DUMPBIN_PATH=$(find '/c/Program Files/Microsoft Visual Studio' -name 'dumpbin.exe' 2>/dev/null | head -1)
-          if [ -n "$DUMPBIN_PATH" ]; then
-            echo "Found dumpbin at: $DUMPBIN_PATH"
+          # Use PowerShell for proper Windows path handling
+          echo "--- Dependency Analysis with PowerShell ---"
+          powershell -Command "
+            # Check DLL dependencies using Get-Item and try loading
+            Write-Host '=== DLL File Information ==='
+            Get-ChildItem lib/simpleble/*.dll | ForEach-Object {
+              Write-Host \"File: \$(\$_.Name) - Size: \$(\$_.Length) bytes\"
+            }
             
-            echo "--- SimpleBLE-C DLL Dependencies ---"
-            "$DUMPBIN_PATH" /dependents lib/simpleble/simpleble-c.dll || true
+            Write-Host '=== Loading Test Results ==='
+            Write-Host '--- SimpleBLE-C DLL Load Test ---'
+            try { 
+              [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'lib/simpleble/simpleble-c.dll').Path)
+              Write-Host 'SimpleBLE-C: LOADED SUCCESSFULLY'
+            } catch { 
+              Write-Host \"SimpleBLE-C ERROR: \$_\" 
+            }
             
-            echo "--- SimpleBLE Core DLL Dependencies ---" 
-            "$DUMPBIN_PATH" /dependents lib/simpleble/simpleble.dll || true
+            Write-Host '--- SimpleBLE Core DLL Load Test ---'  
+            try { 
+              [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'lib/simpleble/simpleble.dll').Path)
+              Write-Host 'SimpleBLE Core: LOADED SUCCESSFULLY'
+            } catch { 
+              Write-Host \"SimpleBLE Core ERROR: \$_\" 
+            }
             
-            echo "--- Ruby Extension Dependencies ---"
-            "$DUMPBIN_PATH" /dependents lib/simpleble/simpleble.so || true
-          else
-            echo "dumpbin not found, using PowerShell Get-Module method..."
-            
-            # Alternative: Use PowerShell to check DLL dependencies
-            powershell -Command "
-              Write-Host '--- Checking SimpleBLE-C DLL ---'
-              try { Add-Type -Path 'lib/simpleble/simpleble-c.dll' } catch { Write-Host \"Error: \$_\" }
+            Write-Host '=== WinRT Environment Check ==='
+            # Check if WinRT is available
+            try {
+              Add-Type -AssemblyName 'Windows.Runtime, Version=255.255.255.255, Culture=neutral, PublicKeyToken=null, ContentType=WindowsRuntime'
+              Write-Host 'WinRT Runtime: AVAILABLE'
+            } catch {
+              Write-Host \"WinRT Runtime: NOT AVAILABLE - \$_\"
+            }
+          " || true
+          
+          # Use dumpbin with proper Windows paths via PowerShell
+          echo "--- DLL Dependencies via dumpbin ---"
+          powershell -Command "
+            # Find dumpbin.exe  
+            \$dumpbin = Get-ChildItem 'C:\\Program Files\\Microsoft Visual Studio' -Recurse -Name 'dumpbin.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (\$dumpbin) {
+              \$dumpbinPath = Join-Path 'C:\\Program Files\\Microsoft Visual Studio' \$dumpbin
+              Write-Host \"Found dumpbin at: \$dumpbinPath\"
               
-              Write-Host '--- Checking SimpleBLE Core DLL ---'  
-              try { Add-Type -Path 'lib/simpleble/simpleble.dll' } catch { Write-Host \"Error: \$_\" }
+              Write-Host '--- SimpleBLE-C Dependencies ---'
+              & \$dumpbinPath /dependents (Resolve-Path 'lib/simpleble/simpleble-c.dll').Path
               
-              Write-Host '--- Checking Ruby Extension Loading ---'
-              try { Add-Type -Path 'lib/simpleble/simpleble.so' } catch { Write-Host \"Error: \$_\" }
-            " || true
-          fi
+              Write-Host '--- SimpleBLE Core Dependencies ---'
+              & \$dumpbinPath /dependents (Resolve-Path 'lib/simpleble/simpleble.dll').Path
+            } else {
+              Write-Host 'dumpbin.exe not found in Visual Studio installation'
+            }
+          " || true
           
           echo "--- Available System DLLs ---"
           echo "Checking for common Windows API DLLs that SimpleBLE might need..."
