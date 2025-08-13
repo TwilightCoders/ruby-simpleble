@@ -101,23 +101,48 @@ def find_simpleble_libraries
   
   if windows?
     lib_path = File.join(vendor_path, 'build_simpleble', 'install', 'lib')
+    puts "Searching for Windows SimpleBLE libraries in: #{lib_path}"
+    
+    # List what's actually in the directory
+    if File.directory?(lib_path)
+      Dir.entries(lib_path).each { |f| puts "  Found file: #{f}" }
+    else
+      abort "Library directory does not exist: #{lib_path}"
+    end
+    
     $LDFLAGS << " -L#{lib_path}"
     
-    # Try to link with simpleble-c library
-    unless have_library('simpleble-c', nil, lib_path)
-      abort "SimpleBLE library (simpleble-c) not found in #{lib_path}"
+    # Try to find and link the library file directly
+    lib_file = File.join(lib_path, 'simpleble-c.lib')
+    if File.exist?(lib_file)
+      puts "Found library file: #{lib_file}"
+      $LDFLAGS << " #{lib_file}"
+    else
+      # Try with have_library as fallback
+      unless have_library('simpleble-c')
+        abort "SimpleBLE library (simpleble-c) not found in #{lib_path}"
+      end
     end
   else
     lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
+    puts "Searching for Unix SimpleBLE libraries in: #{lib_path}"
+    
+    # List what's actually in the directory  
+    if File.directory?(lib_path)
+      Dir.entries(lib_path).each { |f| puts "  Found file: #{f}" }
+    else
+      abort "Library directory does not exist: #{lib_path}"
+    end
+    
     $LDFLAGS << " -L#{lib_path}"
     
     # Try to link with simplecble library
-    unless have_library('simplecble', nil, lib_path)
+    unless have_library('simplecble')
       abort "SimpleBLE library (simplecble) not found in #{lib_path}"
     end
   end
   
-  puts "Found SimpleBLE library in: #{lib_path}"
+  puts "SimpleBLE library configuration completed for: #{lib_path}"
 end
 
 # Main build process
