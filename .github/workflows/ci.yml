@@ -56,6 +56,46 @@ jobs:
           ls -la ext/simpleble/ || true
           file ext/simpleble/simpleble.* || true
 
+      - name: Analyze Windows DLL dependencies
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "=== Windows DLL Dependency Analysis ==="
+          echo "Analyzing SimpleBLE DLL dependencies to identify missing system libraries..."
+          
+          # Find Visual Studio installation for dumpbin
+          DUMPBIN_PATH=$(find '/c/Program Files/Microsoft Visual Studio' -name 'dumpbin.exe' 2>/dev/null | head -1)
+          if [ -n "$DUMPBIN_PATH" ]; then
+            echo "Found dumpbin at: $DUMPBIN_PATH"
+            
+            echo "--- SimpleBLE-C DLL Dependencies ---"
+            "$DUMPBIN_PATH" /dependents lib/simpleble/simpleble-c.dll || true
+            
+            echo "--- SimpleBLE Core DLL Dependencies ---" 
+            "$DUMPBIN_PATH" /dependents lib/simpleble/simpleble.dll || true
+            
+            echo "--- Ruby Extension Dependencies ---"
+            "$DUMPBIN_PATH" /dependents lib/simpleble/simpleble.so || true
+          else
+            echo "dumpbin not found, using PowerShell Get-Module method..."
+            
+            # Alternative: Use PowerShell to check DLL dependencies
+            powershell -Command "
+              Write-Host '--- Checking SimpleBLE-C DLL ---'
+              try { Add-Type -Path 'lib/simpleble/simpleble-c.dll' } catch { Write-Host \"Error: \$_\" }
+              
+              Write-Host '--- Checking SimpleBLE Core DLL ---'  
+              try { Add-Type -Path 'lib/simpleble/simpleble.dll' } catch { Write-Host \"Error: \$_\" }
+              
+              Write-Host '--- Checking Ruby Extension Loading ---'
+              try { Add-Type -Path 'lib/simpleble/simpleble.so' } catch { Write-Host \"Error: \$_\" }
+            " || true
+          fi
+          
+          echo "--- Available System DLLs ---"
+          echo "Checking for common Windows API DLLs that SimpleBLE might need..."
+          ls -la /c/Windows/System32/ | grep -E "(api-ms-|bluetooth|winrt|ole32|oleaut32|ws2_32|iphlpapi|bcrypt|runtimeobject)" || true
+
       - name: Upload compile log
         if: always()
         uses: actions/upload-artifact@v4
