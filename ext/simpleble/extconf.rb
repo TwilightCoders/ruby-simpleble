@@ -42,7 +42,7 @@ else
   end
   
   lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
-  $LDFLAGS << " #{lib_path}/libsimplecble.a"
+  $LDFLAGS << " #{lib_path}/libsimplecble.a #{lib_path}/libsimpleble.a"
   
   # SimpleBLE is C++, so we need to link C++ standard library and runtime
   $LIBS << " -lstdc++ -lm"
