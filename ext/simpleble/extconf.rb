@@ -1,5 +1,9 @@
 require 'mkmf'
 
+# Configure for C++ compilation since SimpleBLE is C++
+CONFIG['CC'] = ENV['CXX'] || CONFIG['CXX'] || 'g++'
+CONFIG['LDSHARED'] = CONFIG['LDSHARED'].gsub(/^cc/, CONFIG['CC'])
+
 # Simple, direct approach
 if RUBY_PLATFORM =~ /mingw|mswin|cygwin/
   # Windows - use dynamic linking to avoid static library issues
@@ -43,6 +47,9 @@ else
   
   lib_path = File.join(vendor_path, 'install_simplecble', 'lib')
   $LDFLAGS << " #{lib_path}/libsimplecble.a"
+  
+  # SimpleBLE is C++, so we need to link C++ standard library
+  $LDFLAGS << " -lstdc++"
   
   if RUBY_PLATFORM =~ /darwin/
     $LDFLAGS << " -framework Foundation -framework CoreBluetooth -framework IOBluetooth"
