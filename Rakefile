@@ -33,7 +33,7 @@ def copy_native_extension
       FileUtils.cp(dll, File.join('lib', 'simpleble', File.basename(dll)))
       puts "🔗 Copied dependency DLL #{dll}"
     end
-    
+
     # Also copy any potential runtime DLLs from system
     %w[msvcr140.dll msvcp140.dll vcruntime140.dll].each do |sys_dll|
       system_paths = [
@@ -48,7 +48,7 @@ def copy_native_extension
         end
       end
     end
-    
+
     puts "ℹ️ No dependency DLLs found" if dlls.empty?
   end
 end
@@ -56,10 +56,10 @@ end
 desc "Compile the C extension"
 task :compile do
   Dir.chdir('ext/simpleble') do
-  reuse = ENV['SIMPLEBLE_REUSE_OBJECTS'] == '1'
-  ruby 'extconf.rb'
-  sh 'make clean' unless reuse
-  sh( reuse ? 'make -j' : 'make')
+    reuse = ENV['SIMPLEBLE_REUSE_OBJECTS'] == '1'
+    ruby 'extconf.rb'
+    sh 'make clean' unless reuse
+    sh(reuse ? 'make -j' : 'make')
   end
   copy_native_extension
 end
@@ -95,12 +95,12 @@ desc "Show vendor SimpleBLE status"
 task :vendor_status do
   puts "📊 Vendor SimpleBLE submodule status:"
   sh "git submodule status"
-  
+
   puts "\n🏷️ SimpleBLE version info:"
   if Dir.exist?('vendor/simpleble/.git')
     puts "  Git info:"
     sh "cd vendor/simpleble && git log --oneline -3"
-    
+
     if File.exist?('vendor/simpleble/VERSION')
       version = File.read('vendor/simpleble/VERSION').strip
       puts "\n  SimpleBLE VERSION file: #{version}"
@@ -112,11 +112,11 @@ task :vendor_status do
   puts "\n📋 Key vendor files:"
   key_files = %w[
     vendor/simpleble/simpleble/include/simpleble/SimpleBLE.h
-  vendor/simpleble/simpleble/include/simpleble_c/simpleble.h
+    vendor/simpleble/simpleble/include/simpleble_c/simpleble.h
     vendor/simpleble/install_simplecble/lib/libsimpleble.a
     vendor/simpleble/install_simplecble/lib/libsimplecble.a
   ]
-  
+
   key_files.each do |file|
     if File.exist?(file)
       mtime = File.mtime(file)
@@ -126,7 +126,7 @@ task :vendor_status do
       puts "  #{File.basename(file)}: ❌ MISSING"
     end
   end
-  
+
   puts "\n💡 To update vendor library:"
   puts "  git submodule update --remote vendor/simpleble"
 end
