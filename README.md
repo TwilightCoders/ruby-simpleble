@@ -20,7 +20,7 @@ require 'simpleble'
 # Check if Bluetooth is available
 SimpleBLE.bluetooth_enabled?  # => true
 
-# Get available Bluetooth adapters  
+# Get available Bluetooth adapters
 adapters = SimpleBLE.adapters
 adapter = adapters.first
 puts adapter.identifier       # => "Default Adapter [uuid]"
@@ -40,53 +40,75 @@ end
 ## ✨ Features
 
 ### 🌐 **Cross-Platform Support**
+
+
 - **macOS** - CoreBluetooth framework integration
-- **Linux** - DBus/BlueZ backend support  
-- **Windows** - WinRT Bluetooth APIs *(ready for testing)*
+- **Linux** - DBus/BlueZ backend support
+- **Windows** - WinRT Bluetooth APIs _(ready for testing)_
+
 
 ### 🔍 **BLE Operations**
-- ✅ **Bluetooth adapter discovery and management**
-- ✅ **Device scanning with timeout control**  
-- ✅ **Real-time device discovery**
-- ✅ **RSSI and connection status monitoring**
-- 🚧 **GATT service/characteristic operations** *(in development)*
-- 🚧 **Device connection and bonding** *(in development)*
 
-### 🏗️ **Production Ready**
-- ✅ **Memory-safe C extension with proper lifecycle management**
-- ✅ **Comprehensive exception hierarchy for error handling**
-- ✅ **Thread-safe operations**
-- ✅ **RSpec test suite with 84%+ coverage**
-- ✅ **Cross-platform build system**
+- ✅ Adapter discovery & identifiers
+- ✅ Bluetooth enabled check
+- ✅ Device scanning (blocking scan_for + continuous start/stop)
+- ✅ Peripheral information (identifier, address, RSSI, TX power, MTU, address_type)
+- ✅ Connection lifecycle (connect, disconnect, paired?, unpair)
+- ✅ Paired peripherals access
+- ✅ GATT service & characteristic enumeration with capabilities
+- ✅ Characteristic read/write operations (request & command modes)
+- ✅ Descriptor read/write operations
+- ✅ Manufacturer data & advertisement parsing
+- 🚧 Notifications/Indications _(callback support planned)_
+
+
+### 🏗️ **Current State**
+
+- ✅ Core C extension foundation & memory management for adapters/peripherals
+- ✅ Exception hierarchy & native error mapping (scan/connection/characteristic errors)
+- ✅ Cross-platform build scripts (macOS/Linux/Windows all working)
+- ✅ Comprehensive adapter & peripheral API implemented
+- ✅ GATT operations layer with service/characteristic/descriptor access
+- ✅ Ruby-friendly API with helper methods and convenience features
+- 🚧 Expanded test coverage (integration tests gated by hardware)
+- 🚧 Notification/indication callback support
 
 ## 🛠️ Installation
+
 
 ### Prerequisites
 
 **macOS:**
+
+
 - Xcode command line tools: `xcode-select --install`
 
 **Linux:**
+
 ```bash
 # Ubuntu/Debian
 sudo apt-get install build-essential libdbus-1-dev cmake
+
 
 # Red Hat/CentOS
 sudo yum install gcc-c++ dbus-devel cmake
 ```
 
 **Windows:**
+
 - Visual Studio Build Tools
 - Windows SDK
 - CMake
 
 ### Install the Gem
 
+
 ```bash
 gem install simpleble
 ```
 
 Or add to your Gemfile:
+
 ```ruby
 gem 'simpleble'
 ```
@@ -114,7 +136,7 @@ adapters = SimpleBLE::Adapter.get_adapters
 adapter = adapters.first
 
 # Adapter information
-adapter.identifier            # => "Default Adapter [uuid]"  
+adapter.identifier            # => "Default Adapter [uuid]"
 adapter.address              # => "XX:XX:XX:XX:XX:XX" (or UUID on macOS)
 
 # Scanning operations
@@ -123,20 +145,50 @@ adapter.scan_stop            # Stop scanning
 adapter.scan_for(timeout_ms) # Scan for specific duration
 adapter.scan_active?         # => true/false
 adapter.scan_results         # => [Peripheral, ...]
+adapter.paired_peripherals   # => [Peripheral, ...] - Previously paired devices
 ```
 
-### Peripheral Information
+### Peripheral Operations
 
 ```ruby
 devices = SimpleBLE.scan(5000)
 device = devices.first
 
+# Basic information
 device.identifier            # Device name or identifier
-device.address              # MAC address or UUID  
-device.rssi                 # Signal strength
-device.address_type         # Address type (public/random)
+device.address              # MAC address or UUID
+device.rssi                 # Signal strength in dBm
+device.tx_power             # Advertised TX power in dBm
+device.mtu                  # Maximum transmission unit
+device.address_type         # Address type (public/random/unspecified)
+
+# Connection management
 device.connectable?         # Whether device accepts connections
 device.connected?           # Current connection status
+device.paired?              # Whether device is paired
+device.connect              # Establish connection
+device.disconnect           # Close connection
+device.unpair               # Remove pairing
+
+# GATT operations (requires connection)
+services = device.services  # => [{"uuid" => "...", "characteristics" => [...]}]
+data = device.read_characteristic(service_uuid, char_uuid)
+device.write_characteristic_request(service_uuid, char_uuid, data)
+device.write_characteristic_command(service_uuid, char_uuid, data)
+
+# Descriptor operations
+desc_data = device.read_descriptor(service_uuid, char_uuid, desc_uuid)
+device.write_descriptor(service_uuid, char_uuid, desc_uuid, data)
+
+# Advertisement data
+mfg_data = device.manufacturer_data  # => [{"manufacturer_id" => 123, "data" => "..."}]
+
+# Helper methods
+device.name                 # Friendly name (identifier or address)
+device.to_s                 # "Name (address)"
+device.has_data?            # Check if device has valid data
+device.rssi_s               # "-67 dBm"
+device.address_type_s       # "Public" / "Random" / "Unspecified"
 ```
 
 ## 🧪 Interactive Testing
@@ -167,7 +219,7 @@ git submodule update --init --recursive
 # Install dependencies
 bundle install
 
-# Compile the C extension 
+# Compile the C extension
 rake compile
 
 # Run tests
@@ -193,7 +245,7 @@ bundle exec rspec
 # Run with coverage
 bundle exec rspec --format documentation
 
-# Test specific functionality  
+# Test specific functionality
 bundle exec rspec spec/simpleble_spec.rb
 ```
 
@@ -205,7 +257,7 @@ SimpleBLE Ruby uses a layered architecture:
 Ruby Application
        ↓
 SimpleBLE Ruby Wrapper (lib/simpleble.rb)
-       ↓  
+       ↓
 C Extension Layer (ext/simpleble/)
        ↓
 SimpleBLE C++ Library (vendor/simpleble/)
@@ -216,39 +268,91 @@ Platform BLE APIs (CoreBluetooth/BlueZ/WinRT)
 ### Key Components
 
 - **Ruby API Layer**: Clean, idiomatic Ruby interface
-- **C Extension**: Memory-safe Ruby ↔ C++ bridge  
+- **C Extension**: Memory-safe Ruby ↔ C++ bridge
 - **C++ Wrapper**: Type-safe interface to SimpleBLE library
 - **SimpleBLE Library**: Cross-platform BLE abstraction
 - **Platform Backends**: OS-specific BLE implementations
 
-## 🚦 Current Status
+### 🚦 Status Summary
 
-### ✅ **Completed** 
-- Cross-platform build system and C extension compilation
-- Bluetooth adapter discovery and management
-- BLE device scanning with timeout control
-- Memory-safe Ruby object lifecycle management
-- Comprehensive test suite and documentation
+| Area                      | Implemented | Notes                                                  |
+| ------------------------- | ----------- | ------------------------------------------------------ |
+| Adapter enumeration       | ✅          | identifier, address                                    |
+| Scanning (start/stop/for) | ✅          | Timed & continuous                                     |
+| Scan results retrieval    | ✅          | Returns Peripheral objects                             |
+| Peripheral basic info     | ✅          | identifier, address, RSSI, TX power, MTU, address_type |
+| Connection lifecycle      | ✅          | connect, disconnect, paired?, unpair                   |
+| Paired peripherals        | ✅          | Access to previously paired devices                    |
+| Services/Characteristics  | ✅          | Full enumeration with capabilities                     |
+| Characteristic I/O        | ✅          | Read/write with request & command modes                |
 
-### 🚧 **In Development**
-- GATT service and characteristic operations
-- Device connection and disconnection
-- Read/write/notify operations for characteristics  
-- Advanced BLE features (bonding, security, callbacks)
+| Descriptor I/O            | ✅          | Read/write operations                                  |
+| Manufacturer data         | ✅          | Advertisement parsing                                  |
+| Windows support           | ✅          | All platforms working                                  |
+| Test coverage             | 🚧          | Expanding beyond placeholders                          |
+| Documentation accuracy    | ✅          | Reflects current API                                   |
 
-### 🔮 **Planned**
-- Asynchronous operation support with Ruby blocks
-- Device filtering and advanced scanning options
-- Cross-platform CI/CD pipeline
-- Performance optimization and memory profiling
+### Roadmap
+
+- [ ] Notification/indication callbacks with GC-safe storage
+- [ ] Hardware-gated integration test suite expansion
+- [ ] Performance optimizations and memory usage analysis
+- [ ] Precompiled native gem variants (later)
 
 ## 📊 Compatibility
 
-| Platform | Status | Backend | Notes |
-|----------|---------|---------|-------|
-| **macOS** | ✅ Working | CoreBluetooth | Full support, tested |
-| **Linux** | 🚧 Ready | BlueZ/DBus | Build system ready, needs testing |
-| **Windows** | 🚧 Ready | WinRT | Build system ready, needs testing |
+| Platform    | Status     | Backend       | Notes                           |
+| ----------- | ---------- | ------------- | ------------------------------- |
+| **macOS**   | ✅ Working | CoreBluetooth | Full support, production tested |
+| **Linux**   | ✅ Working | BlueZ/DBus    | CI passing, production ready    |
+| **Windows** | ✅ Working | WinRT         | CI passing, production ready    |
+
+
+## ⚡ CI Performance & Caching
+
+
+Building the SimpleBLE core for every Ruby version slows the matrix. Two knobs:
+
+1. `SIMPLEBLE_PREBUILT_LIB` – point to a prebuilt static library (and headers) so only the Ruby bridge compiles.
+
+2. `SIMPLEBLE_REUSE_OBJECTS=1` – skip `make clean` and reuse previously cached `.o` files.
+
+### Prebuilt Flow
+
+
+
+Create a warmup job that builds once, packages `tmp_flat/*.o` (or a consolidated `libsimpleble_core.a` you produce via `ar`), uploads as an artifact, then matrix jobs download and set:
+
+```
+env:
+       SIMPLEBLE_PREBUILT_LIB: path/to/libsimpleble_core.a
+```
+
+
+`extconf.rb` detects this and links only the Ruby layer.
+
+
+### Object Reuse Flow
+
+Use `actions/cache` keyed on OS + hash of `vendor/simpleble/**`:
+
+```
+- uses: actions/cache@v4
+       with:
+              path: ext/simpleble/tmp_flat
+              key: simpleble-obj-${{ runner.os }}-${{ hashFiles('vendor/simpleble/**') }}
+```
+
+Then set `SIMPLEBLE_REUSE_OBJECTS: 1` so the compile task skips cleaning.
+
+### Variables Summary
+
+| Var                       | Purpose                                                                    |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `SIMPLEBLE_PREBUILT_LIB`  | Path to prebuilt SimpleBLE static lib to link instead of compiling sources |
+| `SIMPLEBLE_REUSE_OBJECTS` | If `1`, do not run `make clean`; rely on cached object files               |
+
+Regenerate caches whenever the SimpleBLE submodule changes.
 
 ## 🤝 Contributing
 
@@ -272,5 +376,5 @@ This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.t
 
 - [Homepage](https://github.com/twilightcoders/ruby-simpleble)
 - [Documentation](https://github.com/twilightcoders/ruby-simpleble)
-- [Issue Tracker](https://github.com/twilightcoders/ruby-simpleble/issues) 
+- [Issue Tracker](https://github.com/twilightcoders/ruby-simpleble/issues)
 - [SimpleBLE Library](https://github.com/OpenBluetoothToolbox/SimpleBLE)
